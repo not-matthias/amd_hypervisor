@@ -1,0 +1,30 @@
+[package]
+name = "amd_hypervisor"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pe          = { git = "https://github.com/rust-game-hacks/driver" }
+nt          = { git = "https://github.com/rust-game-hacks/driver" }
+log         = { git = "https://github.com/rust-game-hacks/driver" }
+hook        = { git = "https://github.com/rust-game-hacks/driver" }
+clean       = { git = "https://github.com/rust-game-hacks/driver" }
+km-alloc    = { git = "https://github.com/rust-game-hacks/driver" }
+protection  = { git = "https://github.com/rust-game-hacks/driver" }
+bypass      = { git = "https://github.com/rust-game-hacks/driver" }
+
+obfstr = "0.3.0"
+
+x86_64 = "0.14.7"
+x86 = { git = "https://github.com/dancrossnyc/rust-x86", branch = "asm" }
+
+[dependencies.winapi]
+git = "https://github.com/Trantect/winapi-rs.git"
+branch = "feature/km"
+features = [
+    "wdm",
+    "ntstatus"
+]
