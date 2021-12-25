@@ -1,5 +1,5 @@
 use crate::nt::include::MmGetPhysicalAddress;
-use crate::nt::memory::{alloc_aligned, PAGE_SHIFT};
+use crate::nt::memory::alloc_aligned;
 use x86::bits64::paging::PDFlags;
 use x86::bits64::paging::{PAddr, PDEntry, PML4Entry, PML4Flags};
 

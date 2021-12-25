@@ -1,6 +1,5 @@
 extern crate alloc;
 
-use crate::nt::memory::{alloc_aligned, alloc_contiguous};
 use crate::nt::processor::processor_count;
 use crate::svm::data::shared_data::SharedData;
 use alloc::vec::Vec;

@@ -30,7 +30,7 @@ impl MsrBitmap {
         })
     }
 
-    pub fn build(mut self) -> Self {
+    pub fn build(self) -> Self {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
         //
         let mut bitmap_header: RTL_BITMAP = unsafe { core::mem::zeroed() };
