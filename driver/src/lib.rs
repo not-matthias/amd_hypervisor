@@ -2,16 +2,19 @@
 #![feature(lang_items)]
 #![feature(let_else)]
 
+use ::nt::include::IRP_MJ_DEVICE_CONTROL;
 use core::panic::PanicInfo;
 use km_alloc::KernelAlloc;
 use log::{KernelLogger, LevelFilter};
+use winapi::km::wdm::PDRIVER_OBJECT;
 use winapi::shared::{
     ntdef::{NTSTATUS, PVOID},
     ntstatus::*,
 };
 
-pub mod ioctl;
+pub mod nt;
 pub mod support;
+pub mod svm;
 
 #[no_mangle]
 #[allow(bad_style)]
@@ -33,11 +36,28 @@ static GLOBAL: KernelAlloc = KernelAlloc;
 
 static LOGGER: KernelLogger = KernelLogger;
 
+pub extern "C" fn driver_unload(_driver: PDRIVER_OBJECT) {
+    // Devirtualize all processors
+    //
+    // TODO: Implement
+}
+
 #[no_mangle]
-pub extern "system" fn DriverEntry(_driver: PVOID, _path: PVOID) -> NTSTATUS {
+pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
 
     log::info!("Hello from amd_hypervisor!");
+
+    // Register `driver_unload` so we can devirtualize the processor later
+    //
+    log::info!("Registering driver unload routine");
+    unsafe {
+        ((*driver)
+            .MajorFunction
+            .as_mut_ptr()
+            .add(IRP_MJ_DEVICE_CONTROL) as *mut u64)
+            .write_volatile(driver_unload as *const () as _)
+    };
 
     // Check whether svm is supported
     //
@@ -48,12 +68,9 @@ pub extern "system" fn DriverEntry(_driver: PVOID, _path: PVOID) -> NTSTATUS {
         log::info!("SVM is supported");
     }
 
-    // // Hook major function
-    // //
-    // hook::device_control::hook_major_function(
-    //     obfstr!(L "\\Driver\\Null"),
-    //     hook_handler as *const (),
-    // );
+    // Virtualize processors
+    //
+    log::info!("Virtualizing processors");
 
     STATUS_SUCCESS
 }
