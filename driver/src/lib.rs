@@ -3,6 +3,8 @@
 #![feature(let_else)]
 #![feature(const_fmt_arguments_new)]
 #![feature(const_fn_fn_ptr_basics)]
+#![feature(llvm_asm)]
+#![feature(untagged_unions)]
 
 use crate::svm::Processors;
 use core::panic::PanicInfo;
@@ -61,7 +63,7 @@ pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTST
 
     // Virtualize processors
     //
-    let Some(processors) = Processors::new() else {
+    let Some(mut processors) = Processors::new() else {
         log::info!("Failed to create processors");
         return STATUS_UNSUCCESSFUL;
     };

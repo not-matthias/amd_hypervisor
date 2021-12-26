@@ -1,8 +1,9 @@
-use crate::nt::include::MmGetPhysicalAddress;
+use crate::nt::addresses::aligned_physical_address;
+
 use crate::nt::memory::alloc_aligned;
 use crate::svm::paging::LegacyPDE;
 use x86::bits64::paging::PDPTEntry;
-use x86::bits64::paging::{PAddr, PDPTFlags, PML4Entry, PML4Flags};
+use x86::bits64::paging::{PDPTFlags, PML4Entry, PML4Flags};
 
 #[repr(C, align(4096))]
 pub struct NestedPageTableData {
@@ -37,19 +38,10 @@ impl NestedPageTable {
         })
     }
 
-    unsafe fn get_aligned_physical_address(ptr: *mut u64) -> PAddr {
-        let physical_address = *MmGetPhysicalAddress(ptr as _).QuadPart() as u64;
-
-        log::trace!("physical address: {:x}", physical_address);
-
-        PAddr::from(physical_address).align_down_to_base_page()
-    }
-
     pub unsafe fn build(mut self) -> Self {
         log::info!("Building nested page tables");
 
-        let pdp_base_pa =
-            Self::get_aligned_physical_address((*self.data).pdp_entries.as_mut_ptr() as _);
+        let pdp_base_pa = aligned_physical_address((*self.data).pdp_entries.as_mut_ptr() as _);
 
         let flags = PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]);
         let entry = PML4Entry::new(pdp_base_pa, flags);
@@ -62,7 +54,7 @@ impl NestedPageTable {
 
             let pde_address = &mut (*self.data).pd_entries[i][0];
             let pde_address = pde_address as *mut LegacyPDE as *mut u64;
-            let pde_base_pa = Self::get_aligned_physical_address(pde_address);
+            let pde_base_pa = aligned_physical_address(pde_address);
 
             let flags = PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]);
             let entry = PDPTEntry::new(pde_base_pa, flags);

@@ -24,7 +24,7 @@ pub struct ControlArea {
     pub exit_info1: u64,                     // +0x078
     pub exit_info2: u64,                     // +0x080
     pub exit_int_info: u64,                  // +0x088
-    pub np_enable: u64,                      // +0x090
+    pub np_enable: NpEnable,                 // +0x090
     pub avic_apic_bar: u64,                  // +0x098
     pub guest_pa_of_ghcb: u64,               // +0x0a0
     pub event_inj: u64,                      // +0x0a8
@@ -46,6 +46,16 @@ pub struct ControlArea {
 // TODO: Test size = 0x400
 
 bitflags! {
+    pub struct NpEnable: u64 {
+        const NESTED_PAGING                     = 1 << 0;
+        const SECURE_ENCRYPTED_VIRTUALIZATION   = 1 << 1;
+        const ENCRYPTED_STATE                   = 1 << 2;
+        const GUEST_MODE_EXECUTE_TRAP           = 1 << 3;
+        const SSS_CHECK_EN                      = 1 << 4;
+        const VIRTUAL_TRANSPARENT_ENCRYPTION    = 1 << 5;
+        const ENABLE_INVLPGB                    = 1 << 7;
+    }
+
     pub struct InterceptMisc1: u32 {
         const INTERCEPT_INTR = 0;
         const INTERCEPT_NMI = 1;

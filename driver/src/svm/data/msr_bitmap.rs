@@ -2,15 +2,16 @@ use crate::nt::include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_B
 use crate::nt::memory::{alloc_contiguous, PAGE_SIZE};
 use core::mem::MaybeUninit;
 use nt::include::PVOID;
+use x86::msr::IA32_EFER;
 
-pub const IA32_MSR_PAT: usize = 0x00000277;
-pub const IA32_MSR_EFER: usize = 0xc0000080;
-pub const CHAR_BIT: usize = 8;
-pub const BITS_PER_MSR: usize = 2;
-pub const SECOND_MSR_RANGE_BASE: usize = 0xc0000000;
-pub const SECOND_MSRPM_OFFSET: usize = 0x800 * CHAR_BIT;
+pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc0010117;
+pub const EFER_SVME: u64 = 1 << 12;
+pub const CHAR_BIT: u32 = 8;
+pub const BITS_PER_MSR: u32 = 2;
+pub const SECOND_MSR_RANGE_BASE: u32 = 0xc0000000;
+pub const SECOND_MSRPM_OFFSET: u32 = 0x800 * CHAR_BIT;
 
-pub const SVM_MSR_PERMISSIONS_MAP_SIZE: usize = PAGE_SIZE * 2;
+pub const SVM_MSR_PERMISSIONS_MAP_SIZE: u32 = (PAGE_SIZE * 2) as u32;
 
 pub struct MsrBitmap {
     pub bitmap: PVOID,
@@ -56,7 +57,7 @@ impl MsrBitmap {
         // IA32_MSR_EFER in bits. Then, add an offset until the second MSR
         // permissions map.
         //
-        let offset = (IA32_MSR_EFER - SECOND_MSR_RANGE_BASE) * BITS_PER_MSR;
+        let offset = (IA32_EFER - SECOND_MSR_RANGE_BASE) * BITS_PER_MSR;
         let offset = SECOND_MSRPM_OFFSET + offset;
 
         // TODO: Figure out what this exactly does.

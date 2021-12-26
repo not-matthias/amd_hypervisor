@@ -3,6 +3,7 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
+use core::mem::MaybeUninit;
 use winapi::shared::ntdef::PVOID;
 use winapi::{
     km::wdm::{KIRQL, KPROCESSOR_MODE, POOL_TYPE},
@@ -287,79 +288,89 @@ pub type XMM_SAVE_AREA = XSAVE_FORMAT;
 ///
 /// Size: 1232 bytes (confirmed)
 #[repr(C, align(16))]
-pub struct CONTEXT {
+pub struct Context {
     //
     // Register parameter home addresses.
     //
-    // N.B. These fields are for convience - they could be used to extend the
+    // N.B. These fields are for convenience - they could be used to extend the
     //      context record in the future.
-    p1_home: u64,
-    p2_home: u64,
-    p3_home: u64,
-    p4_home: u64,
-    p5_home: u64,
-    p6_home: u64,
+    pub p1_home: u64,
+    pub p2_home: u64,
+    pub p3_home: u64,
+    pub p4_home: u64,
+    pub p5_home: u64,
+    pub p6_home: u64,
     /*
      * Control flags.
      */
-    context_flags: u32,
-    mx_csr: u32,
+    pub context_flags: u32,
+    pub mx_csr: u32,
     /*
      * Segment Registers and processor flags.
      */
-    seg_cs: u16,
-    seg_ds: u16,
-    seg_es: u16,
-    seg_fs: u16,
-    seg_gs: u16,
-    seg_ss: u16,
-    e_flags: u32,
+    pub seg_cs: u16,
+    pub seg_ds: u16,
+    pub seg_es: u16,
+    pub seg_fs: u16,
+    pub seg_gs: u16,
+    pub seg_ss: u16,
+    pub e_flags: u32,
     //
     // Debug registers
-    dr0: u64,
-    dr1: u64,
-    dr2: u64,
-    dr3: u64,
-    dr6: u64,
-    dr7: u64,
+    pub dr0: u64,
+    pub dr1: u64,
+    pub dr2: u64,
+    pub dr3: u64,
+    pub dr6: u64,
+    pub dr7: u64,
     /*
      * Integer registers.
      */
-    rax: u64,
-    rcx: u64,
-    rdx: u64,
-    rbx: u64,
-    rsp: u64,
-    rbp: u64,
-    rsi: u64,
-    rdi: u64,
-    r8: u64,
-    r9: u64,
-    r10: u64,
-    r11: u64,
-    r12: u64,
-    r13: u64,
-    r14: u64,
-    r15: u64,
+    pub rax: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rbx: u64,
+    pub rsp: u64,
+    pub rbp: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
     /*
      * Program counter.
      */
-    rip: u64,
+    pub rip: u64,
     /*
      * Floating point state.
      */
-    flt_save: XMM_SAVE_AREA,
+    pub flt_save: XMM_SAVE_AREA,
     /*
      * Vector registers.
      */
-    vector_register: [u128; 26],
-    vector_control: u64,
+    pub vector_register: [u128; 26],
+    pub vector_control: u64,
     /*
      * Special debug control registers.
      */
-    debug_control: u64,
-    last_branch_to_rip: u64,
-    last_branch_from_rip: u64,
-    last_exception_to_rip: u64,
-    last_exception_from_rip: u64,
+    pub debug_control: u64,
+    pub last_branch_to_rip: u64,
+    pub last_branch_from_rip: u64,
+    pub last_exception_to_rip: u64,
+    pub last_exception_from_rip: u64,
+}
+
+impl Context {
+    pub fn capture() -> Self {
+        let mut context: MaybeUninit<Context> = MaybeUninit::uninit();
+
+        unsafe { RtlCaptureContext(context.as_mut_ptr() as _) };
+
+        unsafe { context.assume_init() }
+    }
 }

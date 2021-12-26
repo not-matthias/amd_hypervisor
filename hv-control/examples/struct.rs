@@ -169,4 +169,6 @@ fn main() {
     // PD
     //
     pde_entry(123, 123);
+
+    println!("{:?}", std::mem::size_of::<winapi::shared::basetsd::ULONG_PTR>());
 }
