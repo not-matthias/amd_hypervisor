@@ -83,3 +83,5 @@ pub struct SaveArea {
     pub last_excep_from: u64,
     pub last_excep_to: u64,
 }
+
+// TODO: Test size = 0x298

@@ -1,17 +1,17 @@
 extern crate alloc;
 
-use crate::nt::processor::processor_count;
 use crate::svm::data::shared_data::SharedData;
-use alloc::vec::Vec;
+
 use x86::cpuid::{CpuId, Hypervisor};
 
 pub mod data;
+pub mod paging;
 pub mod vmcb;
 pub mod vmexit;
 
 pub struct Processors {
     shard_data: SharedData,
-    processors: Vec<Processor>,
+    // processors: Vec<Processor>,
 }
 
 impl Processors {
@@ -23,11 +23,11 @@ impl Processors {
     /// TODO: Should this be inside this instead? In terms of API usage, it would make sense to prevent mistakes.
     /// TODO: Return Result?
     pub fn new() -> Option<Self> {
-        let processors = (0..processor_count()).map(Processor::new).collect();
+        // let processors = (0..processor_count()).map(Processor::new).collect();
 
         Some(Self {
             shard_data: SharedData::new()?,
-            processors,
+            // processors,
         })
     }
 

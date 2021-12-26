@@ -6,6 +6,9 @@ use crate::svm::vmcb::save_area::SaveArea;
 pub mod control_area;
 pub mod save_area;
 
+const VMCB_RESERVED_SIZE: usize =
+    0x1000 - core::mem::size_of::<ControlArea>() - core::mem::size_of::<SaveArea>();
+
 /// # Layout
 ///
 /// The VMCB is divided into two areas—the first one contains various control bits including the
@@ -21,4 +24,6 @@ pub struct Vmcb {
     /// Describes the fields within the state-save area; note that the table lists offsets
     /// relative to the state-save area (not the VMCB as a whole).
     pub save_area: SaveArea,
+
+    pub reserved: [u8; VMCB_RESERVED_SIZE],
 }

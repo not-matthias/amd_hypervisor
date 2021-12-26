@@ -1,15 +1,15 @@
+use crate::ctl_code::{IOCTL_INSTALL, IOCTL_UNLOAD, IOCTL_UNUSED};
 use ntapi::{
     ntioapi::{NtOpenFile, FILE_NON_DIRECTORY_FILE},
     ntrtl::RtlInitUnicodeString,
 };
 use widestring::U16CString;
+use winapi::um::handleapi::CloseHandle;
 use winapi::um::ioapiset::DeviceIoControl;
 use winapi::{
     shared::ntdef::{InitializeObjectAttributes, OBJECT_ATTRIBUTES, OBJ_CASE_INSENSITIVE},
     um::winnt::{FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_SHARE_READ, FILE_SHARE_WRITE},
 };
-use winapi::um::handleapi::CloseHandle;
-use crate::ctl_code::{IOCTL_INSTALL, IOCTL_UNLOAD, IOCTL_UNUSED};
 
 /// Creates a new ctl code from the parameters.
 pub const fn ctl_code(device_type: u32, function: u32, method: u32, access: u32) -> u32 {
@@ -106,6 +106,8 @@ fn main() {
     let result = IoctlConnector::new(U16CString::from_str("\\Device\\Null").unwrap(), 0).unwrap();
     println!("{:?}", result);
 
-    result.call(IOCTL_INSTALL, 42 as *mut u32).expect("Failed to send ioctl");
+    result
+        .call(IOCTL_INSTALL, 42 as *mut u32)
+        .expect("Failed to send ioctl");
     // result.call(IOCTL_UNLOAD, 42 as *mut u32).expect("Failed to send ioctl");
 }

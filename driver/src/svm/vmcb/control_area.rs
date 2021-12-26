@@ -43,6 +43,8 @@ pub struct ControlArea {
     pub reserved4: [u8; 0x400 - 0x110],      // +0x110
 }
 
+// TODO: Test size = 0x400
+
 bitflags! {
     pub struct InterceptMisc1: u32 {
         const INTERCEPT_INTR = 0;

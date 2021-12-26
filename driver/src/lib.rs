@@ -1,11 +1,15 @@
 #![no_std]
 #![feature(lang_items)]
 #![feature(let_else)]
+#![feature(const_fmt_arguments_new)]
+#![feature(const_fn_fn_ptr_basics)]
 
-use ::nt::include::IRP_MJ_DEVICE_CONTROL;
+use crate::svm::Processors;
 use core::panic::PanicInfo;
+
 use km_alloc::KernelAlloc;
 use log::{KernelLogger, LevelFilter};
+use winapi::km::wdm::DRIVER_OBJECT;
 use winapi::km::wdm::PDRIVER_OBJECT;
 use winapi::shared::{
     ntdef::{NTSTATUS, PVOID},
@@ -21,7 +25,9 @@ pub mod svm;
 static _fltused: i32 = 0;
 
 #[panic_handler]
-const fn panic(_info: &PanicInfo<'_>) -> ! {
+fn panic(info: &PanicInfo<'_>) -> ! {
+    log::error!("Panic: {}", info);
+
     loop {}
 }
 
@@ -36,7 +42,7 @@ static GLOBAL: KernelAlloc = KernelAlloc;
 
 static LOGGER: KernelLogger = KernelLogger;
 
-pub extern "C" fn driver_unload(_driver: PDRIVER_OBJECT) {
+pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     // Devirtualize all processors
     //
     // TODO: Implement
@@ -44,20 +50,14 @@ pub extern "C" fn driver_unload(_driver: PDRIVER_OBJECT) {
 
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
+    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
 
     log::info!("Hello from amd_hypervisor!");
 
     // Register `driver_unload` so we can devirtualize the processor later
     //
     log::info!("Registering driver unload routine");
-    unsafe {
-        ((*driver)
-            .MajorFunction
-            .as_mut_ptr()
-            .add(IRP_MJ_DEVICE_CONTROL) as *mut u64)
-            .write_volatile(driver_unload as *const () as _)
-    };
+    unsafe { (*driver).DriverUnload = Some(driver_unload) };
 
     // Check whether svm is supported
     //
@@ -70,7 +70,16 @@ pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTST
 
     // Virtualize processors
     //
-    log::info!("Virtualizing processors");
+    let Some(_processors) = Processors::new() else {
+        log::info!("Failed to create processors");
+        return STATUS_UNSUCCESSFUL;
+    };
+
+    // if !processors.virtualize() {
+    //     log::warn!("Failed to virtualize processors");
+    // }
+
+    // TODO: Devirtualize and free memory when failing (and when unloading)
 
     STATUS_SUCCESS
 }

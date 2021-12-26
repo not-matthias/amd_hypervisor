@@ -11,6 +11,7 @@ use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
 // TODO: Move to paging module
 pub const PAGE_SHIFT: u64 = 12;
 pub const PAGE_SIZE: usize = 0x1000;
+const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 
 /// Aligns the specified virtual address to a page.
 ///
@@ -19,18 +20,24 @@ pub const PAGE_SIZE: usize = 0x1000;
 /// let page = page_align!(4097);
 /// assert_eq!(page, 4096);
 /// ```
+///
+/// # Credits
+/// // See: https://stackoverflow.com/questions/20771394/how-to-understand-the-macro-of-page-align-in-kernel/20771666
 #[macro_export]
 macro_rules! page_align {
     ($virtual_address:expr) => {
-        $virtual_address & (PAGE_SIZE - 1)
+        ($virtual_address + PAGE_SIZE - 1) & PAGE_MASK
     };
 }
 
 /// Allocates page aligned, zero filled physical memory.
 pub fn alloc_aligned(bytes: usize) -> Option<PVOID> {
+    log::trace!("Allocating {} bytes of aligned physical memory", bytes);
+
     // The size must equal/greater than a page, to align it to a page
     //
     if bytes < PAGE_SIZE {
+        log::warn!("Allocating memory failed: size is smaller than a page");
         return None;
     }
 
@@ -38,12 +45,14 @@ pub fn alloc_aligned(bytes: usize) -> Option<PVOID> {
     //
     let memory = unsafe { ExAllocatePool(NonPagedPool, bytes) };
     if memory.is_null() {
+        log::warn!("Failed to allocate memory");
         return None;
     }
 
     // Make sure it's aligned
     //
     if page_align!(memory as usize) != memory as usize {
+        log::warn!("Memory is not aligned to a page");
         return None;
     }
 
@@ -64,6 +73,8 @@ pub fn free_aligned(address: PVOID) {
 /// # What is contiguous memory?
 /// Click [here](https://stackoverflow.com/questions/4059363/what-is-a-contiguous-memory-block).
 pub fn alloc_contiguous(bytes: usize) -> Option<PVOID> {
+    log::trace!("Allocating {} bytes of contiguous physical memory", bytes);
+
     let mut boundary: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
     let mut lowest: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
     let mut highest: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
@@ -91,7 +102,8 @@ pub fn alloc_contiguous(bytes: usize) -> Option<PVOID> {
 
     // Zero the memory
     //
-    unsafe { RtlZeroMemory(memory, bytes) };
+    // unsafe { RtlZeroMemory(memory, bytes) };
+    // TODO: Add this again
 
     Some(memory)
 }

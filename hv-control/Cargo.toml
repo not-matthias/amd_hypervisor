@@ -13,3 +13,6 @@ thiserror  = "1.0.30"
 
 x86 = { git = "https://github.com/dancrossnyc/rust-x86", branch = "asm" }
 #x86_64 = "0.14.7"
+
+[dev-dependencies]
+bitfield = "0.13.2"

@@ -1,5 +1,5 @@
-use x86::cpuid::CpuId;
 use core::arch::asm;
+use x86::cpuid::CpuId;
 
 fn main() {
     CpuId::new().get_hypervisor_info().map(|hv_info| {
@@ -14,9 +14,10 @@ fn main() {
     });
 
     println!();
-    CpuId::new().get_extended_processor_and_feature_identifiers().map(|proc_info| {
-        println!("Proc info: {:?}", proc_info);
-        println!("Proc info - has_svm: {:?}", proc_info.has_svm());
-    });
-
+    CpuId::new()
+        .get_extended_processor_and_feature_identifiers()
+        .map(|proc_info| {
+            println!("Proc info: {:?}", proc_info);
+            println!("Proc info - has_svm: {:?}", proc_info.has_svm());
+        });
 }

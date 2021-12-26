@@ -1,5 +1,6 @@
 use crate::nt::include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP};
 use crate::nt::memory::{alloc_contiguous, PAGE_SIZE};
+use core::mem::MaybeUninit;
 use nt::include::PVOID;
 
 pub const IA32_MSR_PAT: usize = 0x00000277;
@@ -23,7 +24,9 @@ impl MsrBitmap {
         let memory = alloc_contiguous(PAGE_SIZE * 2);
         if memory.is_none() {
             log::warn!("Failed to allocate memory for MSR permission map");
+            return None;
         }
+        log::trace!("Allocated memory for MSR permission map: {:x?}", memory);
 
         Some(Self {
             bitmap: memory? as PVOID,
@@ -31,10 +34,12 @@ impl MsrBitmap {
     }
 
     pub fn build(self) -> Self {
+        log::info!("Building msr permission bitmap");
+
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
         //
-        let mut bitmap_header: RTL_BITMAP = unsafe { core::mem::zeroed() };
-        let bitmap_header_ptr = &mut bitmap_header as *mut RTL_BITMAP;
+        let mut bitmap_header: MaybeUninit<RTL_BITMAP> = MaybeUninit::uninit();
+        let bitmap_header_ptr = bitmap_header.as_mut_ptr() as *mut RTL_BITMAP;
 
         // Setup and clear all bits, indicating no MSR access should be intercepted.
         //
