@@ -1,7 +1,9 @@
 extern crate alloc;
 
+use crate::nt::processor::processor_count;
+use crate::support;
 use crate::svm::data::shared_data::SharedData;
-
+use alloc::vec::Vec;
 use x86::cpuid::{CpuId, Hypervisor};
 
 pub mod data;
@@ -11,29 +13,32 @@ pub mod vmexit;
 
 pub struct Processors {
     shard_data: SharedData,
-    // processors: Vec<Processor>,
+    processors: Vec<Processor>,
 }
 
 impl Processors {
     /// Creates new instance for all the processors on the system.
-    ///
-    /// # Assumptions
-    ///
-    /// The caller must already have checked whether the system supports virtualization.
-    /// TODO: Should this be inside this instead? In terms of API usage, it would make sense to prevent mistakes.
-    /// TODO: Return Result?
     pub fn new() -> Option<Self> {
-        // let processors = (0..processor_count()).map(Processor::new).collect();
+        if !support::is_svm_supported() {
+            log::error!("SVM is not supported");
+            return None;
+        }
 
         Some(Self {
             shard_data: SharedData::new()?,
-            // processors,
+            processors: (0..processor_count()).map(Processor::new).collect(),
         })
     }
 
     pub fn virtualize(&self) -> bool {
-        //
-        false
+        for processor in &self.processors {
+            if !processor.virtualize() {
+                log::error!("Failed to virtualize processor {}", processor.id());
+                return false;
+            }
+        }
+
+        true
     }
 }
 
@@ -45,6 +50,8 @@ pub struct Processor {
 
 impl Processor {
     pub fn new(index: u32) -> Self {
+        log::trace!("Creating processor {}", index);
+
         // TODO:
         // - Allocate context
         // - Allocate per processor data (VIRTUAL_PROCESSOR_DATA)
@@ -83,5 +90,13 @@ impl Processor {
     fn launch_vm(&self) {
         // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
         //
+    }
+
+    pub fn devirtualize(&self) {
+        // TODO: Call cpuid with custom parameters
+    }
+
+    pub fn id(&self) -> u32 {
+        self.index
     }
 }

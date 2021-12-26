@@ -50,7 +50,7 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
+    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
 
     log::info!("Hello from amd_hypervisor!");
 
@@ -59,25 +59,16 @@ pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTST
     log::info!("Registering driver unload routine");
     unsafe { (*driver).DriverUnload = Some(driver_unload) };
 
-    // Check whether svm is supported
-    //
-    if !support::is_svm_supported() {
-        log::error!("SVM is not supported");
-        return STATUS_UNSUCCESSFUL;
-    } else {
-        log::info!("SVM is supported");
-    }
-
     // Virtualize processors
     //
-    let Some(_processors) = Processors::new() else {
+    let Some(processors) = Processors::new() else {
         log::info!("Failed to create processors");
         return STATUS_UNSUCCESSFUL;
     };
 
-    // if !processors.virtualize() {
-    //     log::warn!("Failed to virtualize processors");
-    // }
+    if !processors.virtualize() {
+        log::error!("Failed to virtualize processors");
+    }
 
     // TODO: Devirtualize and free memory when failing (and when unloading)
 
