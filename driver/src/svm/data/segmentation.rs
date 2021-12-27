@@ -2,12 +2,6 @@
 
 use bitfield::bitfield;
 
-#[repr(C)]
-pub struct DescriptorTableRegister {
-    pub limit: u16,
-    pub base: u64,
-}
-
 bitfield! {
     pub struct SegmentDescriptor(u64);
     impl Debug;
