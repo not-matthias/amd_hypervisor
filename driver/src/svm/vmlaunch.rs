@@ -1,3 +1,7 @@
+use core::arch::global_asm;
+
+global_asm!(include_str!("vmlaunch.asm"));
+
 extern "C" {
-    fn launch_vm(host_rsp: u64);
+    pub fn launch_vm(host_rsp: u64);
 }
