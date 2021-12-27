@@ -102,8 +102,7 @@ pub fn alloc_contiguous(bytes: usize) -> Option<PVOID> {
 
     // Zero the memory
     //
-    // unsafe { RtlZeroMemory(memory, bytes) };
-    // TODO: Add this again
+    unsafe { RtlZeroMemory(memory, bytes) };
 
     Some(memory)
 }
