@@ -9,6 +9,7 @@ use crate::svm::data::segmentation::{SegmentAttribute, SegmentDescriptor};
 use x86_64::instructions::tables::{sgdt, sidt};
 use x86_64::registers::control::{Cr0, Cr4};
 
+// Size: 0x298
 #[repr(C)]
 pub struct SaveArea {
     pub es_selector: u16,
@@ -95,24 +96,14 @@ pub struct SaveArea {
     pub last_excep_to: u64,
 }
 
-// TODO: Test size = 0x298
-
 impl SaveArea {
     // See: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L893
-    fn segment_access_right(segment_selector: u16, gdt_base: u64) -> u64 {
-        log::info!(
-            "Getting segment access right for segment selector: {:x}",
-            segment_selector
-        );
-
+    fn segment_access_right(segment_selector: u16, gdt_base: u64) -> u16 {
         const RPL_MASK: u16 = 3;
         let descriptor = gdt_base + (segment_selector & !RPL_MASK) as u64;
-        log::info!("Descriptor: {:x}", descriptor);
 
         let descriptor = descriptor as *mut u64 as *mut SegmentDescriptor;
         let descriptor = unsafe { descriptor.read_volatile() };
-
-        log::info!("descriptor: {:x?}", descriptor);
 
         let mut attribute = SegmentAttribute(0);
         attribute.set_type(descriptor.get_type() as u16);
@@ -124,12 +115,7 @@ impl SaveArea {
         attribute.set_default_bit(descriptor.get_default_bit() as u16);
         attribute.set_granularity(descriptor.get_granularity() as u16);
 
-        log::info!("Attribute: {:x?}", attribute);
-
-        // TODO: Verify if this is actually the correct output
-        // Use this: https://reverseengineering.stackexchange.com/questions/5868/how-can-i-view-fs0-with-windbg
-
-        attribute.0 as u64
+        attribute.0
     }
 
     // See: https://www.felixcloutier.com/x86/lsl
@@ -141,6 +127,7 @@ impl SaveArea {
         limit
     }
 
+    // TODO: VALIDATED
     pub fn build(&mut self) {
         // Like this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1053
 
@@ -174,10 +161,10 @@ impl SaveArea {
         self.es_selector = context.seg_es;
         self.ss_selector = context.seg_ss;
 
-        self.cs_base = Self::segment_access_right(context.seg_cs, gdt.base.as_u64());
-        self.ds_base = Self::segment_access_right(context.seg_ds, gdt.base.as_u64());
-        self.es_base = Self::segment_access_right(context.seg_es, gdt.base.as_u64());
-        self.ss_base = Self::segment_access_right(context.seg_ss, gdt.base.as_u64());
+        self.cs_attrib = Self::segment_access_right(context.seg_cs, gdt.base.as_u64());
+        self.ds_attrib = Self::segment_access_right(context.seg_ds, gdt.base.as_u64());
+        self.es_attrib = Self::segment_access_right(context.seg_es, gdt.base.as_u64());
+        self.ss_attrib = Self::segment_access_right(context.seg_ss, gdt.base.as_u64());
 
         self.gpat = unsafe { rdmsr(IA32_PAT) };
         self.efer = unsafe { rdmsr(IA32_EFER) };
