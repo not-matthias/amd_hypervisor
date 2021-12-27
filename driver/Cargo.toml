@@ -31,3 +31,8 @@ features = [
     "wdm",
     "ntstatus"
 ]
+
+#[profile.release]
+#lto = true
+#debug = true
+#panic = "abort"
