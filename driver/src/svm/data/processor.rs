@@ -1,7 +1,6 @@
 use crate::nt::memory::{alloc_aligned, PAGE_SIZE};
 use crate::svm::data::shared_data::SharedData;
 use core::arch::asm;
-use core::ops::Deref;
 
 use crate::nt::addresses::physical_address;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
@@ -78,7 +77,7 @@ impl ProcessorDataWrapper {
         let guest_vmcb_pa = physical_address(unsafe { &(*self.data).guest_vmcb as *const _ as _ });
         let host_vmcb_pa = physical_address(unsafe { &(*self.data).host_vmcb as *const _ as _ });
         let host_state_area_pa =
-            physical_address(unsafe { (*self.data).host_state_area.as_mut_ptr() as *const _ });
+            physical_address(unsafe { (*self.data).host_state_area.as_ptr() as *const _ });
         let pml4_pa =
             physical_address(unsafe { (*shared_data.npt.data).pml4_entries.as_ptr() as *const _ });
         let msr_pm_pa = physical_address(shared_data.msr_permission_map.bitmap as *const _);
@@ -92,6 +91,7 @@ impl ProcessorDataWrapper {
 
         // Configure which instructions to intercept
         //
+        log::info!("Configuring instructions to intercept");
         unsafe {
             (*self.data)
                 .guest_vmcb
@@ -131,6 +131,7 @@ impl ProcessorDataWrapper {
 
         // Enable nested page tables.
         //
+        log::info!("Configuring nested page tables");
         unsafe {
             (*self.data)
                 .guest_vmcb
@@ -143,6 +144,7 @@ impl ProcessorDataWrapper {
 
         // Setup guest state based on current system state.
         //
+        log::info!("Configuring guest state save area");
         unsafe { (*self.data).guest_vmcb.save_area.build() };
 
         // Save some of the current state on VMCB.
@@ -151,25 +153,29 @@ impl ProcessorDataWrapper {
         // - https://docs.microsoft.com/en-us/cpp/intrinsics/svm-vmsave?view=msvc-170
         // - 15.5.2 VMSAVE and VMLOAD Instructions
         //
+        log::info!("Saving current guest state on VMCB");
         unsafe { asm!("vmsave rax", in("rax") guest_vmcb_pa.as_u64()) };
 
         // Store data to stack so that the host (hypervisor) can use those values.
         //
+        log::info!("Setting up the stack layout");
         unsafe {
             (*self.data).host_stack_layout.reserved_1 = u64::MAX;
             (*self.data).host_stack_layout.shared_data = shared_data as *const _;
-            (*self.data).host_stack_layout.self_data = self.data as *mut _;
+            (*self.data).host_stack_layout.self_data = self.data;
             (*self.data).host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
             (*self.data).host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
         }
 
-        // TODO: ???? Why do we need this and what is it used for?
+        // Set the physical address for the `vmrun` instruction, which will save
+        // the current host state.
         //
+        log::info!("Setting the host state area in SVM_MSR_VM_HSAVE_PA");
         unsafe { wrmsr(SVM_MSR_VM_HSAVE_PA, host_state_area_pa.as_u64()) };
 
         // Also save current state for the host.
-        // TODO: ???
         //
+        log::info!("Saving current host state on VMCB");
         unsafe { asm!("vmsave rax", in("rax") host_vmcb_pa.as_u64()) };
     }
 }
