@@ -1,17 +1,21 @@
 extern crate alloc;
 
-use crate::nt::processor::processor_count;
+use crate::nt::processor::{execute_on_processor, processor_count};
 use crate::support;
 
 use crate::svm::data::processor::ProcessorDataWrapper;
 use crate::svm::data::shared_data::SharedData;
 use alloc::vec::Vec;
 
+use crate::debug::dbg_break;
+use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::svm::data::msr_bitmap::EFER_SVME;
+use crate::svm::vmlaunch::launch_vm;
 use x86::cpuid::{CpuId, Hypervisor};
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod data;
+pub mod events;
 pub mod paging;
 pub mod vmcb;
 pub mod vmexit;
@@ -59,13 +63,6 @@ impl Processor {
     pub fn new(index: u32) -> Option<Self> {
         log::trace!("Creating processor {}", index);
 
-        // TODO:
-        // - Allocate context
-        // - Allocate per processor data (VIRTUAL_PROCESSOR_DATA)
-        //   - GuestVmcb
-        //   - HostVmcb
-        //   - Stack, TrapFrame (?)
-
         Some(Self {
             index,
             data: ProcessorDataWrapper::new()?,
@@ -92,22 +89,17 @@ impl Processor {
             .unwrap_or_default()
     }
 
-    pub fn launch_vm(&self) {
-        // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
-        //
-
-        let host_rsp = self.data.data.host_stack_layout.guest_vmcb_pa;
-    }
-
-    pub fn virtualize(&mut self, shared_data: &SharedData) -> bool {
+    pub fn virtualize_processor(data: (&mut Processor, &SharedData)) -> Option<()> {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
+
+        let (processor, shared_data) = data;
 
         // Check if already virtualized.
         //
-        if self.is_virtualized() {
-            log::info!("Processor {} is already virtualized", self.index);
-            return true;
-        }
+        // if self.is_virtualized() {
+        //     log::info!("Processor {} is already virtualized", self.index);
+        //     return true;
+        // }
 
         // Attempt to virtualize the processor
         //
@@ -118,13 +110,26 @@ impl Processor {
 
         // Setup vmcb
         //
-        self.data.prepare_for_virtualization(shared_data);
+        processor.data.prepare_for_virtualization(shared_data);
+
+        dbg_break!();
 
         // Launch vm
+        // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
         //
-        self.launch_vm();
+        let host_rsp = unsafe { &(*processor.data.data).host_stack_layout.guest_vmcb_pa };
+        let host_rsp = host_rsp as *const u64 as u64;
+        unsafe { launch_vm(host_rsp) };
 
         log::info!("We should have never been here.");
+        dbg_break!();
+        unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
+
+        Some(())
+    }
+
+    pub fn virtualize(&mut self, shared_data: &SharedData) -> bool {
+        execute_on_processor(self.index, &Self::virtualize_processor, (self, shared_data));
         true
     }
 

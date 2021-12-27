@@ -42,9 +42,9 @@ fn switch_execution(
 }
 
 /// Executes the specified function on a specific processor.
-pub fn execute_on_processor<F, D>(i: u32, f: &F, data: &D) -> Option<()>
+pub fn execute_on_processor<F, D>(i: u32, f: &F, data: D) -> Option<()>
 where
-    F: Fn(&D) -> Option<()>,
+    F: Fn(D) -> Option<()>,
 {
     if i > processor_count() {
         return None;
