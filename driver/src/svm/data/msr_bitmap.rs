@@ -60,8 +60,6 @@ impl MsrBitmap {
         let offset = (IA32_EFER - SECOND_MSR_RANGE_BASE) * BITS_PER_MSR;
         let offset = SECOND_MSRPM_OFFSET + offset;
 
-        // TODO: Figure out what this exactly does.
-
         // Set the MSB bit indicating write accesses to the MSR should be
         // intercepted.
         //
