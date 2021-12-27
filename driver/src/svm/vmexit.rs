@@ -1,170 +1,139 @@
-use bitflags::bitflags;
+use crate::debug::dbg_break;
+use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
+use crate::svm::data::guest::{GuestContext, GuestRegisters};
+use crate::svm::data::processor::ProcessorData;
+use crate::svm::events::EventInjection;
+use crate::svm::vmcb::control_area::VmExitCode;
+use core::arch::asm;
+use x86::cpuid::cpuid;
+use x86::msr::{rdmsr, wrmsr};
 
-bitflags! {
-    pub struct VmExitCode: u32  {
-        const VMEXIT_CR0_READ = 0;
-        const VMEXIT_CR1_READ = 1;
-        const VMEXIT_CR2_READ = 2;
-        const VMEXIT_CR3_READ = 3;
-        const VMEXIT_CR4_READ = 4;
-        const VMEXIT_CR5_READ = 5;
-        const VMEXIT_CR6_READ = 6;
-        const VMEXIT_CR7_READ = 7;
-        const VMEXIT_CR8_READ = 8;
-        const VMEXIT_CR9_READ = 9;
-        const VMEXIT_CR10_READ = 10;
-        const VMEXIT_CR11_READ = 11;
-        const VMEXIT_CR12_READ = 12;
-        const VMEXIT_CR13_READ = 13;
-        const VMEXIT_CR14_READ = 14;
-        const VMEXIT_CR15_READ = 15;
-        const VMEXIT_CR0_WRITE = 16;
-        const VMEXIT_CR1_WRITE = 17;
-        const VMEXIT_CR2_WRITE = 18;
-        const VMEXIT_CR3_WRITE = 19;
-        const VMEXIT_CR4_WRITE = 20;
-        const VMEXIT_CR5_WRITE = 21;
-        const VMEXIT_CR6_WRITE = 22;
-        const VMEXIT_CR7_WRITE = 23;
-        const VMEXIT_CR8_WRITE = 24;
-        const VMEXIT_CR9_WRITE = 25;
-        const VMEXIT_CR10_WRITE = 26;
-        const VMEXIT_CR11_WRITE = 27;
-        const VMEXIT_CR12_WRITE = 28;
-        const VMEXIT_CR13_WRITE = 29;
-        const VMEXIT_CR14_WRITE = 30;
-        const VMEXIT_CR15_WRITE = 31;
-        const VMEXIT_DR0_READ = 32;
-        const VMEXIT_DR1_READ = 33;
-        const VMEXIT_DR2_READ = 34;
-        const VMEXIT_DR3_READ = 35;
-        const VMEXIT_DR4_READ = 36;
-        const VMEXIT_DR5_READ = 37;
-        const VMEXIT_DR6_READ = 38;
-        const VMEXIT_DR7_READ = 39;
-        const VMEXIT_DR8_READ = 40;
-        const VMEXIT_DR9_READ = 41;
-        const VMEXIT_DR10_READ = 42;
-        const VMEXIT_DR11_READ = 43;
-        const VMEXIT_DR12_READ = 44;
-        const VMEXIT_DR13_READ = 45;
-        const VMEXIT_DR14_READ = 46;
-        const VMEXIT_DR15_READ = 47;
-        const VMEXIT_DR0_WRITE = 48;
-        const VMEXIT_DR1_WRITE = 49;
-        const VMEXIT_DR2_WRITE = 50;
-        const VMEXIT_DR3_WRITE = 51;
-        const VMEXIT_DR4_WRITE = 52;
-        const VMEXIT_DR5_WRITE = 53;
-        const VMEXIT_DR6_WRITE = 54;
-        const VMEXIT_DR7_WRITE = 55;
-        const VMEXIT_DR8_WRITE = 56;
-        const VMEXIT_DR9_WRITE = 57;
-        const VMEXIT_DR10_WRITE = 58;
-        const VMEXIT_DR11_WRITE = 59;
-        const VMEXIT_DR12_WRITE = 60;
-        const VMEXIT_DR13_WRITE = 61;
-        const VMEXIT_DR14_WRITE = 62;
-        const VMEXIT_DR15_WRITE = 63;
-        const VMEXIT_EXCEPTION_DE = 64;
-        const VMEXIT_EXCEPTION_DB = 65;
-        const VMEXIT_EXCEPTION_NMI = 66;
-        const VMEXIT_EXCEPTION_BP = 67;
-        const VMEXIT_EXCEPTION_OF = 68;
-        const VMEXIT_EXCEPTION_BR = 69;
-        const VMEXIT_EXCEPTION_UD = 70;
-        const VMEXIT_EXCEPTION_NM = 71;
-        const VMEXIT_EXCEPTION_DF = 72;
-        const VMEXIT_EXCEPTION_09 = 73;
-        const VMEXIT_EXCEPTION_TS = 74;
-        const VMEXIT_EXCEPTION_NP = 75;
-        const VMEXIT_EXCEPTION_SS = 76;
-        const VMEXIT_EXCEPTION_GP = 77;
-        const VMEXIT_EXCEPTION_PF = 78;
-        const VMEXIT_EXCEPTION_15 = 79;
-        const VMEXIT_EXCEPTION_MF = 80;
-        const VMEXIT_EXCEPTION_AC = 81;
-        const VMEXIT_EXCEPTION_MC = 82;
-        const VMEXIT_EXCEPTION_XF = 83;
-        const VMEXIT_EXCEPTION_20 = 84;
-        const VMEXIT_EXCEPTION_21 = 85;
-        const VMEXIT_EXCEPTION_22 = 86;
-        const VMEXIT_EXCEPTION_23 = 87;
-        const VMEXIT_EXCEPTION_24 = 88;
-        const VMEXIT_EXCEPTION_25 = 89;
-        const VMEXIT_EXCEPTION_26 = 90;
-        const VMEXIT_EXCEPTION_27 = 91;
-        const VMEXIT_EXCEPTION_28 = 92;
-        const VMEXIT_EXCEPTION_VC = 93;
-        const VMEXIT_EXCEPTION_SX = 94;
-        const VMEXIT_EXCEPTION_31 = 95;
-        const VMEXIT_INTR = 96;
-        const VMEXIT_NMI = 97;
-        const VMEXIT_SMI = 98;
-        const VMEXIT_INIT = 99;
-        const VMEXIT_VINTR = 100;
-        const VMEXIT_CR0_SEL_WRITE = 101;
-        const VMEXIT_IDTR_READ = 102;
-        const VMEXIT_GDTR_READ = 103;
-        const VMEXIT_LDTR_READ = 104;
-        const VMEXIT_TR_READ = 105;
-        const VMEXIT_IDTR_WRITE = 106;
-        const VMEXIT_GDTR_WRITE = 107;
-        const VMEXIT_LDTR_WRITE = 108;
-        const VMEXIT_TR_WRITE = 109;
-        const VMEXIT_RDTSC = 110;
-        const VMEXIT_RDPMC = 111;
-        const VMEXIT_PUSHF = 112;
-        const VMEXIT_POPF = 113;
-        const VMEXIT_CPUID = 114;
-        const VMEXIT_RSM = 115;
-        const VMEXIT_IRET = 116;
-        const VMEXIT_SWINT = 117;
-        const VMEXIT_INVD = 118;
-        const VMEXIT_PAUSE = 119;
-        const VMEXIT_HLT = 120;
-        const VMEXIT_INVLPG = 121;
-        const VMEXIT_INVLPGA = 122;
-        const VMEXIT_IOIO = 123;
-        const VMEXIT_MSR = 124;
-        const VMEXIT_TASK_SWITCH = 125;
-        const VMEXIT_FERR_FREEZE = 126;
-        const VMEXIT_SHUTDOWN = 127;
-        const VMEXIT_VMRUN = 128;
-        const VMEXIT_VMMCALL = 129;
-        const VMEXIT_VMLOAD = 130;
-        const VMEXIT_VMSAVE = 131;
-        const VMEXIT_STGI = 132;
-        const VMEXIT_CLGI = 133;
-        const VMEXIT_SKINIT = 134;
-        const VMEXIT_RDTSCP = 135;
-        const VMEXIT_ICEBP = 136;
-        const VMEXIT_WBINVD = 137;
-        const VMEXIT_MONITOR = 138;
-        const VMEXIT_MWAIT = 139;
-        const VMEXIT_MWAIT_CONDITIONAL = 140;
-        const VMEXIT_XSETBV = 141;
-        const VMEXIT_EFER_WRITE_TRAP = 143;
-        const VMEXIT_CR0_WRITE_TRAP = 144;
-        const VMEXIT_CR1_WRITE_TRAP = 145;
-        const VMEXIT_CR2_WRITE_TRAP = 146;
-        const VMEXIT_CR3_WRITE_TRAP = 147;
-        const VMEXIT_CR4_WRITE_TRAP = 148;
-        const VMEXIT_CR5_WRITE_TRAP = 149;
-        const VMEXIT_CR6_WRITE_TRAP = 150;
-        const VMEXIT_CR7_WRITE_TRAP = 151;
-        const VMEXIT_CR8_WRITE_TRAP = 152;
-        const VMEXIT_CR9_WRITE_TRAP = 153;
-        const VMEXIT_CR10_WRITE_TRAP = 154;
-        const VMEXIT_CR11_WRITE_TRAP = 155;
-        const VMEXIT_CR12_WRITE_TRAP = 156;
-        const VMEXIT_CR13_WRITE_TRAP = 157;
-        const VMEXIT_CR14_WRITE_TRAP = 158;
-        const VMEXIT_CR15_WRITE_TRAP = 159;
-        const VMEXIT_NPF = 1024;
-        const AVIC_INCOMPLETE_IPI = 1025;
-        const AVIC_NOACCEL = 1026;
-        const VMEXIT_VMGEXIT = 1027;
-        const VMEXIT_INVALID = u32::MAX;
+pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) {
+    // Execute cpuid as requested
+    //
+    let leaf = unsafe { (*guest_context.guest_regs).rax };
+    let subleaf = unsafe { (*guest_context.guest_regs).rcx };
+
+    let cpuid = cpuid!(leaf, subleaf);
+
+    // Modify certain leafs
+    //
+    // TODO: implement
+
+    // Store the result
+    //
+    unsafe {
+        (*guest_context.guest_regs).rax = cpuid.eax as u64;
+        (*guest_context.guest_regs).rbx = cpuid.ebx as u64;
+        (*guest_context.guest_regs).rcx = cpuid.ecx as u64;
+        (*guest_context.guest_regs).rdx = cpuid.edx as u64;
     }
+
+    // Then, advance RIP to "complete" the instruction.
+    //
+    unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
+}
+
+pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
+    let msr = unsafe { (*guest_context.guest_regs).rcx as u32 };
+    let write_access = unsafe { (*data).guest_vmcb.control_area.exit_info1 } != 0;
+
+    dbg_break!();
+
+    // Prevent IA32_EFER from being modified
+    //
+    // if msr == IA32_EFER {
+    //     // TODO: Implement
+    //     //
+    // } else {
+    //     //
+    //     //
+    // }
+
+    // Execute rdmsr or wrmsr as requested by the guest.
+    //
+    // Important: This can bug check if the guest tries to access an MSR that is not supported by
+    //            the host. See SimpleSvm for more information on how to handle this correctly.
+    //
+    if write_access {
+        let low_part = unsafe { (*guest_context.guest_regs).rax as u32 };
+        let high_part = unsafe { (*guest_context.guest_regs).rdx as u32 };
+
+        let value = (high_part as u64) << 32 | low_part as u64;
+
+        unsafe { wrmsr(msr, value) };
+    } else {
+        let value = unsafe { rdmsr(msr) };
+
+        // TODO: Check if `value as u32` is the same as `value & u32::MAX`
+
+        unsafe { (*guest_context.guest_regs).rax = (value as u32) as u64 };
+        unsafe { (*guest_context.guest_regs).rdx = (value >> 32) as u64 };
+    }
+
+    // Then, advance RIP to "complete" the instruction.
+    //
+    unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
+}
+
+pub fn handle_vmrun(data: *mut ProcessorData, _: &mut GuestContext) {
+    // Inject #GP exception
+    //
+    EventInjection::gp().inject(data);
+}
+
+#[no_mangle]
+unsafe extern "stdcall" fn handle_vmexit(
+    data: *mut ProcessorData,
+    guest_registers: *mut GuestRegisters,
+) -> u8 {
+    let mut guest_context = GuestContext::new(guest_registers, false);
+
+    // Load host state that is not loaded on #VMEXIT.
+    //
+    asm!("vmload rax", in("rax") (*data).host_stack_layout.host_vmcb_pa);
+
+    assert_eq!((*data).host_stack_layout.reserved_1, u64::MAX);
+
+    // Guest's RAX is overwritten by the host's value on #VMEXIT and saved in
+    // the VMCB instead. Reflect the guest RAX to the context.
+    //
+    (*guest_registers).rax = (*data).guest_vmcb.save_area.rax;
+
+    // Update the trap frame
+    //
+    (*data).host_stack_layout.trap_frame.rsp = (*data).guest_vmcb.save_area.rsp;
+    (*data).host_stack_layout.trap_frame.rip = (*data).guest_vmcb.control_area.nrip;
+
+    // Handle #VMEXIT
+    //
+    match (*data).guest_vmcb.control_area.exit_code {
+        VmExitCode::VMEXIT_CPUID => {
+            handle_cpuid(data, &mut guest_context);
+        }
+        VmExitCode::VMEXIT_MSR => {
+            handle_msr(data, &mut guest_context);
+        }
+        VmExitCode::VMEXIT_VMRUN => {
+            handle_vmrun(data, &mut guest_context);
+        }
+        _ => {
+            // Invalid #VMEXIT. This should never happen.
+
+            dbg_break!();
+
+            KeBugCheck(MANUALLY_INITIATED_CRASH);
+        }
+    }
+
+    // Terminate hypervisor if requested. TODO: Implement
+
+    // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
+    // RAX is loaded from VMCB on VMRUN.
+    //
+    (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
+
+    // Return whether or not we should exit the virtual machine.
+    //
+    guest_context.exit_vm as u8
 }
