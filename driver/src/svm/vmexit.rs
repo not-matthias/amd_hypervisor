@@ -10,7 +10,6 @@ use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
-use x86_64::instructions::interrupts;
 
 pub const CPUID_DEVIRTUALIZE: u64 = 0x41414141;
 
@@ -183,44 +182,41 @@ unsafe extern "stdcall" fn handle_vmexit(
         // Set return values of cpuid as follows:
         // - rbx = address to return
         // - rcx = stack pointer to restore
-        // - edx:eax = address of the per processor data to be freed by the caller (TODO: I think we can remove this)
         //
-        (*guest_context.guest_regs).rax = data as u64 & u32::MAX as u64;
         (*guest_context.guest_regs).rbx = (*data).guest_vmcb.control_area.nrip;
         (*guest_context.guest_regs).rcx = (*data).guest_vmcb.save_area.rsp;
-        (*guest_context.guest_regs).rdx = data as u64 >> 32;
 
         // Load guest state (currently host state is loaded)
         ////
         let guest_vmcb_pa = physical_address(&(*data).guest_vmcb as *const _ as _).as_u64();
         asm!("vmload rax", in("rax") guest_vmcb_pa);
 
-        // TODO: ??? Why do we need this?
+        // Set the global interrupt flag (GIF) but still disable interrupts by
+        // clearing IF. GIF must be set to return to the normal execution, but
+        // interruptions are not desirable until SVM is disabled as it would
+        // execute random kernel-code in the host context.
         //
-        interrupts::disable();
+        asm!("cli");
         asm!("stgi");
 
-        // Disable svm and restore guest RFLAGS.
+        // Disable svm.
         //
         let msr = rdmsr(IA32_EFER) & !EFER_SVME;
         wrmsr(IA32_EFER, msr);
 
-        // Write to eflags
+        // Restore guest eflags.
         //
         // See:
         // - https://docs.microsoft.com/en-us/cpp/intrinsics/writeeflags
         // - https://www.felixcloutier.com/x86/popf:popfd:popfq
         //
-        let eflags = (*data).guest_vmcb.save_area.rflags;
-        asm!("push {}; popfq", in(reg) eflags);
-
-        return true as u8;
+        asm!("push {}; popfq", in(reg) (*data).guest_vmcb.save_area.rflags);
+    } else {
+        // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
+        // RAX is loaded from VMCB on VMRUN.
+        //
+        (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
     }
-
-    // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
-    // RAX is loaded from VMCB on VMRUN.
-    //
-    (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
 
     // Return whether or not we should exit the virtual machine.
     //

@@ -152,10 +152,9 @@ exit_loop:
     // Virtualization has been terminated. We have to restore everything back
     // to the original state.
     //
-    // Content of some registers:
+    // Content of some registers (return values of cpuid):
     // - rbx        = address to return
     // - rcx        = original stack pointer (host_rsp)
-    // - edx:eax    = address of per processor data for the current processor
     //
     mov rsp, rcx        // rsp = host_rsp
 

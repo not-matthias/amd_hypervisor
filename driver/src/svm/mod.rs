@@ -182,10 +182,6 @@ impl Processor {
 
         log::info!("Processor {} has been devirtualized", self.index);
 
-        // Free per processor data
-        //
-        // TODO: Do we have to do this from here? We can literally call drop on the processor and free it like that.
-
         core::mem::drop(executor);
 
         true
