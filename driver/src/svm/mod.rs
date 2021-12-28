@@ -49,6 +49,11 @@ impl Processors {
         for processor in self.processors.iter_mut() {
             if !processor.virtualize(&self.shard_data) {
                 log::error!("Failed to virtualize processor {}", processor.id());
+
+                // Devirtualize all processors.
+                //
+                self.devirtualize();
+
                 return false;
             }
         }
@@ -57,14 +62,15 @@ impl Processors {
     }
 
     pub fn devirtualize(&mut self) -> bool {
+        let mut status = true;
         for processor in self.processors.iter_mut() {
             if !processor.devirtualize() {
                 log::error!("Failed to devirtualize processor {}", processor.id());
-                return false;
+                status = false;
             }
         }
 
-        true
+        status
     }
 }
 
@@ -104,6 +110,8 @@ impl Processor {
     }
 
     pub fn virtualize(&mut self, shared_data: &SharedData) -> bool {
+        log::info!("Virtualizing processor {}", self.index);
+
         let Some(executor) = ProcessorExecutor::switch_to_processor(self.index) else {
             log::error!("Failed to switch to processor");
             return false
@@ -121,16 +129,13 @@ impl Processor {
         //
         // Literally wasted like a whole day just because of this 1 line.
         //
+        log::info!("Capturing context");
         let context = Context::capture();
-
-        log::info!("After context has been captured");
-        dbg_break!();
 
         // Check if already virtualized.
         //
         if !self.is_virtualized() {
-            // Attempt to virtualize the processor
-            //
+            log::info!("Preparing for virtualization");
 
             // Enable SVM by setting EFER.SVME.
             let msr = unsafe { rdmsr(IA32_EFER) } | EFER_SVME;
@@ -138,7 +143,6 @@ impl Processor {
 
             // Setup vmcb
             //
-            log::info!("Prepared vmcb for virtualization");
             self.processor_data
                 .prepare_for_virtualization(shared_data, context);
 
