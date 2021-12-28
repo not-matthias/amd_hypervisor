@@ -150,8 +150,6 @@ impl<T> DerefMut for AllocatedMemory<T> {
 
 impl<T> Drop for AllocatedMemory<T> {
     fn drop(&mut self) {
-        // TODO: Can we somehow capture self here?
-
         match self.1 {
             AllocType::Aligned => {
                 log::trace!("Freeing aligned physical memory");

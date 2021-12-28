@@ -23,11 +23,6 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
 
     // Modify certain leafs
     //
-    // TODO: implement
-
-    // #define CPUID_MAX_STANDARD_FN_NUMBER_AND_VENDOR_STRING          0x00000000
-    // #define CPUID_SVM_FEATURES                                      0x8000000a
-
     const CPUID_PROCESSOR_AND_PROCESSOR_FEATURE_IDENTIFIERS: u64 = 0x00000001;
     const CPUID_FN0000_0001_ECX_HYPERVISOR_PRESENT: u32 = 1 << 31;
 

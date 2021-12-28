@@ -27,7 +27,7 @@ guest_loop:
     //
     // This instruction does the following:
     // - Saves current state to the host state-save area defined in IA32_MSR_VM_HSAVE_PA.
-    // - Loads guest state from VMCB state-save area. (TODO: This is probably the error source)
+    // - Loads guest state from VMCB state-save area.
     // - Enables interrupts by setting the global interrupt flag (GIF)
     // - Resumes execution of the guest until #VMEXIT occurs.
     //

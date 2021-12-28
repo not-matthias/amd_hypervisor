@@ -100,8 +100,6 @@ pub struct SaveArea {
 impl SaveArea {
     // See: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L893
     fn segment_access_right(segment_selector: u16, gdt_base: u64) -> u16 {
-        // TODO: Check if segment is actually valid. Otherwise we'll read a completely invalid memory location.
-
         const RPL_MASK: u16 = 3;
         let descriptor = gdt_base + (segment_selector & !RPL_MASK) as u64;
 
