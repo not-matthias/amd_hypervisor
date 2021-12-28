@@ -1,13 +1,15 @@
 extern crate alloc;
 
 use crate::nt::include::Context;
+use crate::nt::memory::AlignedMemory;
 use crate::nt::processor::{processor_count, ProcessorExecutor};
 use crate::svm::data::msr_bitmap::EFER_SVME;
-use crate::svm::data::processor::ProcessorDataWrapper;
+use crate::svm::data::processor::ProcessorData;
 use crate::svm::data::shared_data::SharedData;
 use crate::svm::vmexit::CPUID_DEVIRTUALIZE;
 use crate::svm::vmlaunch::launch_vm;
 use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
+
 use alloc::vec::Vec;
 use x86::cpuid::{cpuid, CpuId, Hypervisor};
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
@@ -70,7 +72,7 @@ pub struct Processor {
     /// The index of the processor.
     index: u32,
 
-    processor_data: ProcessorDataWrapper,
+    processor_data: AlignedMemory<ProcessorData>,
 }
 
 impl Processor {
@@ -79,7 +81,7 @@ impl Processor {
 
         Some(Self {
             index,
-            processor_data: ProcessorDataWrapper::new()?,
+            processor_data: ProcessorData::new()?,
         })
     }
 
@@ -151,7 +153,7 @@ impl Processor {
             // 2. The npt is not setup correctly.
             // 3. ???
 
-            let host_rsp = unsafe { &(***self.processor_data).host_stack_layout.guest_vmcb_pa };
+            let host_rsp = unsafe { &(**self.processor_data).host_stack_layout.guest_vmcb_pa };
             let host_rsp = host_rsp as *const u64 as u64;
             unsafe { launch_vm(host_rsp) };
 
