@@ -1,9 +1,8 @@
 //! Handles everything related to the physical processors.
 
-
 use crate::nt::include::{
     KeGetProcessorNumberFromIndex, KeQueryActiveProcessorCountEx,
-    KeRevertToUserGroupAffinityThread, KeSetSystemGroupAffinityThread,
+    KeRevertToUserGroupAffinityThread, KeSetSystemGroupAffinityThread, ZwYieldExecution,
 };
 use core::mem::MaybeUninit;
 use winapi::shared::ntdef::{ALL_PROCESSOR_GROUPS, GROUP_AFFINITY, NT_SUCCESS, PROCESSOR_NUMBER};
@@ -49,6 +48,11 @@ impl ProcessorExecutor {
 
         log::trace!("Switching execution to processor {}", i);
         unsafe { KeSetSystemGroupAffinityThread(&mut affinity, old_affinity.as_mut_ptr()) };
+
+        log::trace!("Yielding execution");
+        if !NT_SUCCESS(unsafe { ZwYieldExecution() }) {
+            return None;
+        }
 
         Some(Self { old_affinity })
     }

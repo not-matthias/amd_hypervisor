@@ -149,6 +149,17 @@ impl ProcessorData {
         log::info!("Saving current guest state on VMCB");
         unsafe { asm!("vmsave rax", in("rax") guest_vmcb_pa.as_u64()) };
 
+        // Set the physical address for the `vmrun` instruction, which will save
+        // the current host state.
+        //
+        log::info!("Setting the host state area in SVM_MSR_VM_HSAVE_PA");
+        unsafe { wrmsr(SVM_MSR_VM_HSAVE_PA, host_state_area_pa.as_u64()) };
+
+        // Also save current state for the host.
+        //
+        log::info!("Saving current host state on VMCB");
+        unsafe { asm!("vmsave rax", in("rax") host_vmcb_pa.as_u64()) };
+
         // Store data to stack so that the host (hypervisor) can use those values.
         //
         log::info!("Setting up the stack layout");
@@ -159,17 +170,5 @@ impl ProcessorData {
             (*self.ptr()).host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
             (*self.ptr()).host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
         }
-
-        // Set the physical address for the `vmrun` instruction, which will save
-        // the current host state.
-        //
-
-        log::info!("Setting the host state area in SVM_MSR_VM_HSAVE_PA");
-        unsafe { wrmsr(SVM_MSR_VM_HSAVE_PA, host_state_area_pa.as_u64()) };
-
-        // Also save current state for the host.
-        //
-        log::info!("Saving current host state on VMCB");
-        unsafe { asm!("vmsave rax", in("rax") host_vmcb_pa.as_u64()) };
     }
 }

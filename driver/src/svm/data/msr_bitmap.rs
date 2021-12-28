@@ -13,6 +13,20 @@ pub const SECOND_MSRPM_OFFSET: u32 = 0x800 * CHAR_BIT;
 
 pub const SVM_MSR_PERMISSIONS_MAP_SIZE: u32 = (PAGE_SIZE * 2) as u32;
 
+// Size: `PAGE_SIZE * 2`
+#[repr(C)]
+pub struct Bitmap {
+    /// 0000_0000 to 0000_1FFF
+    pub msr_bitmap_0: [u8; 2048],
+    /// C000_0000 to C000_1FFF
+    pub msr_bitmap_1: [u8; 2048],
+    /// C001_0000 to C001_1FFF
+    pub msr_bitmap_2: [u8; 2048],
+    /// Reserved
+    pub msr_bitmap_3: [u8; 2048],
+}
+// TODO: Figure out how to use this instead.
+
 pub struct MsrBitmap(AllocatedMemory<u32>);
 
 impl MsrBitmap {

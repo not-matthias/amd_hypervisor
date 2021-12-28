@@ -31,7 +31,7 @@ impl NestedPageTable {
         // One PML4 entry controls 512 page directory pointer entries.
         //
         for i in 0..512 {
-            log::trace!("Setting pdp entry {}", i);
+            // log::trace!("Setting pdp entry {}", i);
 
             let pde_address = &mut (*self.ptr()).pd_entries[i][0];
             let pde_address = pde_address as *mut LegacyPDE as *mut u64;

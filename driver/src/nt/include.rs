@@ -63,6 +63,8 @@ extern "system" {
     pub fn KeBugCheck(BugCheckCode: u32);
 
     pub fn KeGetCurrentIrql() -> KIRQL;
+
+    pub fn ZwYieldExecution() -> NTSTATUS;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes

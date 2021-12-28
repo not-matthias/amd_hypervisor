@@ -4,7 +4,7 @@ use crate::nt::include::{KeBugCheck, KeGetCurrentIrql, MANUALLY_INITIATED_CRASH}
 use crate::svm::data::guest::{GuestContext, GuestRegisters};
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
-use crate::svm::data::segmentation::SegmentDescriptor;
+
 use crate::svm::events::EventInjection;
 use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
@@ -13,7 +13,7 @@ use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub const CPUID_DEVIRTUALIZE: u64 = 0x41414141;
 
-pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) {
+pub fn handle_cpuid(_data: *mut ProcessorData, guest_context: &mut GuestContext) {
     // Execute cpuid as requested
     //
     let leaf = unsafe { (*guest_context.guest_regs).rax };
@@ -55,16 +55,7 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
             cpuid.edx = 0;
         }
         CPUID_DEVIRTUALIZE => {
-            if subleaf == CPUID_DEVIRTUALIZE {
-                // Only allow unloading of the hypervisor in kernel mode.
-                //
-                const DPL_SYSTEM: u64 = 0;
-                let segment =
-                    SegmentDescriptor(unsafe { (*data).guest_vmcb.save_area.ss_attrib } as u64);
-                if segment.get_dpl() == DPL_SYSTEM {
-                    guest_context.exit_vm = true;
-                }
-            };
+            guest_context.exit_vm = true;
         }
         _ => {}
     }
@@ -79,12 +70,8 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
     }
 
     if unsafe { KeGetCurrentIrql() } <= 2 {
-        log::info!("Cpuid: {:x?}", cpuid);
+        log::info!("Cpuid({:x}, {:x}) = {:x?}", leaf, subleaf, cpuid);
     }
-
-    // // Then, advance RIP to "complete" the instruction.
-    // //
-    // unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
 }
 
 pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
@@ -141,10 +128,6 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
             unsafe { (*guest_context.guest_regs).rdx = (value >> 32) as u64 };
         }
     }
-
-    // // Then, advance RIP to "complete" the instruction.
-    // //
-    // unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
 }
 
 pub fn handle_vmrun(data: *mut ProcessorData, _: &mut GuestContext) {
@@ -239,15 +222,11 @@ unsafe extern "stdcall" fn handle_vmexit(
     }
 
     // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
-    // RAX is loaded from VMCB on VMRUN.
+    // RAX is loaded from VMCB on VMRUN. Afterwards, advance RIP to "complete" the
+    // instruction.
     //
     (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
-
-    // Then, advance RIP to "complete" the instruction.
-    //
     (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip;
 
-    // Return whether or not we should exit the virtual machine.
-    //
     guest_context.exit_vm as u8
 }
