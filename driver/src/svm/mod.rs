@@ -10,8 +10,9 @@ use crate::svm::vmexit::CPUID_DEVIRTUALIZE;
 use crate::svm::vmlaunch::launch_vm;
 use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
 
+use crate::support::is_virtualized;
 use alloc::vec::Vec;
-use x86::cpuid::{cpuid, CpuId, Hypervisor};
+use x86::cpuid::{cpuid};
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod data;
@@ -117,24 +118,6 @@ impl Processor {
         })
     }
 
-    /// Checks whether the current process is already virtualized.
-    ///
-    /// This is done by comparing the value of cpuid leaf 0x40000000. The cpuid
-    /// vmexit has to return the correct value to be able to use this.
-    pub fn is_virtualized(&self) -> bool {
-        CpuId::new()
-            .get_hypervisor_info()
-            .map(|hv_info| match hv_info.identify() {
-                Hypervisor::Unknown(ebx, ecx, edx) => {
-                    log::info!("Found unknown hypervisor: {:x} {:x} {:x}", ebx, ecx, edx);
-
-                    ebx == 0x42 && ecx == 0x42 && edx == 0x42
-                }
-                _ => false,
-            })
-            .unwrap_or_default()
-    }
-
     pub fn virtualize(&mut self, shared_data: &mut SharedData) -> bool {
         log::info!("Virtualizing processor {}", self.index);
 
@@ -155,7 +138,7 @@ impl Processor {
 
         // Check if already virtualized.
         //
-        if !self.is_virtualized() {
+        if !is_virtualized() {
             log::info!("Preparing for virtualization");
 
             // Enable SVM by setting EFER.SVME.
@@ -183,10 +166,6 @@ impl Processor {
         }
 
         true
-
-        // log::info!("Processor {} is now virtualized", self.index);
-        //
-        // true
     }
 
     pub fn devirtualize(&self) -> bool {

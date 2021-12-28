@@ -82,9 +82,9 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
         log::info!("Cpuid: {:x?}", cpuid);
     }
 
-    // Then, advance RIP to "complete" the instruction.
-    //
-    unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
+    // // Then, advance RIP to "complete" the instruction.
+    // //
+    // unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
 }
 
 pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
@@ -142,9 +142,9 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
         }
     }
 
-    // Then, advance RIP to "complete" the instruction.
-    //
-    unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
+    // // Then, advance RIP to "complete" the instruction.
+    // //
+    // unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
 }
 
 pub fn handle_vmrun(data: *mut ProcessorData, _: &mut GuestContext) {
@@ -191,9 +191,6 @@ unsafe extern "stdcall" fn handle_vmexit(
         _ => {
             // Invalid #VMEXIT. This should never happen.
             //
-            // If it does happen, then it's very likely due to a misconfigured
-            // control state.
-            //
 
             dbg_break!();
 
@@ -239,12 +236,16 @@ unsafe extern "stdcall" fn handle_vmexit(
         // - https://www.felixcloutier.com/x86/popf:popfd:popfq
         //
         asm!("push {}; popfq", in(reg) (*data).guest_vmcb.save_area.rflags);
-    } else {
-        // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
-        // RAX is loaded from VMCB on VMRUN.
-        //
-        (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
     }
+
+    // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
+    // RAX is loaded from VMCB on VMRUN.
+    //
+    (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
+
+    // Then, advance RIP to "complete" the instruction.
+    //
+    (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip;
 
     // Return whether or not we should exit the virtual machine.
     //

@@ -147,8 +147,6 @@ impl SaveArea {
         self.idtr_base = idt.base.as_u64();
         self.idtr_limit = idt.limit as _;
 
-        // Capture context
-        //
         self.cs_limit = Self::segment_limit(context.seg_cs);
         self.ds_limit = Self::segment_limit(context.seg_ds);
         self.es_limit = Self::segment_limit(context.seg_es);

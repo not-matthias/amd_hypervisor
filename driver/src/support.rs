@@ -1,6 +1,6 @@
 //! Checks whether the current system is able to run the hypervisor.
 
-use x86::cpuid::CpuId;
+use x86::cpuid::{CpuId, Hypervisor};
 use x86::msr::rdmsr;
 
 /// Checks whether svm is supported by the processor.
@@ -58,4 +58,22 @@ pub fn is_svm_supported() -> bool {
     }
 
     false
+}
+
+/// Checks whether the current process is already virtualized.
+///
+/// This is done by comparing the value of cpuid leaf 0x40000000. The cpuid
+/// vmexit has to return the correct value to be able to use this.
+pub fn is_virtualized() -> bool {
+    CpuId::new()
+        .get_hypervisor_info()
+        .map(|hv_info| match hv_info.identify() {
+            Hypervisor::Unknown(ebx, ecx, edx) => {
+                log::info!("Found unknown hypervisor: {:x} {:x} {:x}", ebx, ecx, edx);
+
+                ebx == 0x42 && ecx == 0x42 && edx == 0x42
+            }
+            _ => false,
+        })
+        .unwrap_or_default()
 }
