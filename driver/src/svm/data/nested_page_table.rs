@@ -18,29 +18,29 @@ impl NestedPageTable {
     }
 
     pub unsafe fn build(
-        mut self: AlignedMemory<NestedPageTable>,
+        self: AlignedMemory<NestedPageTable>,
     ) -> AlignedMemory<NestedPageTable> {
         log::info!("Building nested page tables");
 
-        let pdp_base_pa = aligned_physical_address((**self).pdp_entries.as_mut_ptr() as _);
+        let pdp_base_pa = aligned_physical_address((*self.ptr()).pdp_entries.as_mut_ptr() as _);
 
         let flags = PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]);
         let entry = PML4Entry::new(pdp_base_pa, flags);
-        (**self).pml4_entries[0] = entry;
+        (*self.ptr()).pml4_entries[0] = entry;
 
         // One PML4 entry controls 512 page directory pointer entries.
         //
         for i in 0..512 {
             log::trace!("Setting pdp entry {}", i);
 
-            let pde_address = &mut (**self).pd_entries[i][0];
+            let pde_address = &mut (*self.ptr()).pd_entries[i][0];
             let pde_address = pde_address as *mut LegacyPDE as *mut u64;
             let pde_base_pa = aligned_physical_address(pde_address);
 
             let flags = PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]);
             let entry = PDPTEntry::new(pde_base_pa, flags);
 
-            (**self).pdp_entries[i] = entry;
+            (*self.ptr()).pdp_entries[i] = entry;
 
             for j in 0..512 {
                 let translation_pa = (i * 512) + j;
@@ -51,11 +51,11 @@ impl NestedPageTable {
                 //     PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::PS]),
                 // );
 
-                (**self).pd_entries[i][j].set_page_frame_number(translation_pa as u64);
-                (**self).pd_entries[i][j].set_valid(1);
-                (**self).pd_entries[i][j].set_write(1);
-                (**self).pd_entries[i][j].set_user(1);
-                (**self).pd_entries[i][j].set_large_page(1);
+                (*self.ptr()).pd_entries[i][j].set_page_frame_number(translation_pa as u64);
+                (*self.ptr()).pd_entries[i][j].set_valid(1);
+                (*self.ptr()).pd_entries[i][j].set_write(1);
+                (*self.ptr()).pd_entries[i][j].set_user(1);
+                (*self.ptr()).pd_entries[i][j].set_large_page(1);
             }
         }
 
