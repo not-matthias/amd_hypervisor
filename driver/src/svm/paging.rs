@@ -1,5 +1,23 @@
 use bitfield::bitfield;
 
+pub const PAGE_SHIFT: u64 = 12;
+pub const PAGE_SIZE: usize = 0x1000;
+pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
+
+/// Aligns the specified virtual address to a page.
+///
+/// # Example
+/// ```
+/// let page = page_align!(4097);
+/// assert_eq!(page, 4096);
+/// ```
+///
+/// # Credits
+/// // See: https://stackoverflow.com/questions/20771394/how-to-understand-the-macro-of-page-align-in-kernel/20771666
+pub macro page_align($virtual_address:expr) {
+    ($virtual_address + crate::svm::paging::PAGE_SIZE - 1) & crate::svm::paging::PAGE_MASK
+}
+
 bitfield! {
     /// See Figure 5-25. (2-Mbyte PDE—Long Mode)
     pub struct LegacyPDE(u64);

@@ -1,41 +1,30 @@
 //! Everything related to memory.
 
+
 use crate::nt::include::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
+use crate::svm::paging::{page_align, PAGE_SIZE};
 use core::ops::{Deref, DerefMut};
-
+use nt::include::MmIsAddressValid;
 use winapi::um::winnt::RtlZeroMemory;
 use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
 
-// TODO: Move to paging module
-pub const PAGE_SHIFT: u64 = 12;
-pub const PAGE_SIZE: usize = 0x1000;
-const PAGE_MASK: usize = !(PAGE_SIZE - 1);
-
-/// Aligns the specified virtual address to a page.
-///
-/// # Example
-/// ```
-/// let page = page_align!(4097);
-/// assert_eq!(page, 4096);
-/// ```
-///
-/// # Credits
-/// // See: https://stackoverflow.com/questions/20771394/how-to-understand-the-macro-of-page-align-in-kernel/20771666
-#[macro_export]
-macro_rules! page_align {
-    ($virtual_address:expr) => {
-        ($virtual_address + PAGE_SIZE - 1) & PAGE_MASK
-    };
-}
-
+#[derive(Debug)]
+#[repr(C)]
 pub enum AllocType {
     Aligned,
     Contiguous,
 }
 
+/// Allocated memory that can never be null.
+///
+/// It will also automatically be deallocated when dropped. `Deref` and `DerefMut` have been
+/// implemented to abstract the memory and actual code behind it away. Because of this and
+/// generics, we can have any abstract data allocated.
+///
+#[repr(C)]
 pub struct AllocatedMemory<T>(*mut T, AllocType);
 
 impl<T> AllocatedMemory<T> {
@@ -57,19 +46,20 @@ impl<T> AllocatedMemory<T> {
             log::warn!("Failed to allocate memory");
             return None;
         }
+        let mut memory = Self(memory as *mut T, AllocType::Aligned);
 
         // Make sure it's aligned
         //
-        if page_align!(memory as usize) != memory as usize {
+        if page_align!(memory.0 as usize) != memory.0 as usize {
             log::warn!("Memory is not aligned to a page");
             return None;
         }
 
         // Zero the memory
         //
-        unsafe { RtlZeroMemory(memory, bytes) };
+        unsafe { RtlZeroMemory(memory.ptr() as _, bytes) };
 
-        Some(Self(memory as *mut T, AllocType::Aligned))
+        Some(memory)
     }
 
     /// Allocates page aligned, zero filled contiguous physical memory.
@@ -112,7 +102,12 @@ impl<T> AllocatedMemory<T> {
     }
 
     /// Frees the underlying memory.
-    pub fn free(self) {
+    pub fn free(mut self) {
+        if !self.is_valid() {
+            log::trace!("Pointer is not valid. Already deallocated?");
+            return;
+        }
+
         match self.1 {
             AllocType::Aligned => {
                 unsafe { ExFreePool(self.0 as _) };
@@ -124,13 +119,13 @@ impl<T> AllocatedMemory<T> {
     }
 
     /// Returns a pointer to the underlying memory.
-    ///
-    /// # Safety
-    /// This function is very unsafe because we essentially allow multiple mutable pointers.
-    ///
-    /// TODO: How to make it safer?
-    pub const fn ptr(&self) -> *mut T {
+    pub const fn ptr(&mut self) -> *mut T {
         self.0
+    }
+
+    /// Checks whether the underlying memory buffer is null and whether the address pointing to it is valid.
+    pub fn is_valid(&mut self) -> bool {
+        !self.ptr().is_null() && unsafe { MmIsAddressValid(self.ptr() as _) }
     }
 }
 
@@ -150,15 +145,30 @@ impl<T> DerefMut for AllocatedMemory<T> {
 
 impl<T> Drop for AllocatedMemory<T> {
     fn drop(&mut self) {
-        match self.1 {
-            AllocType::Aligned => {
-                log::trace!("Freeing aligned physical memory");
-                unsafe { ExFreePool(self.0 as _) };
-            }
-            AllocType::Contiguous => {
-                log::trace!("Freeing contiguous physical memory");
-                unsafe { MmFreeContiguousMemory(self.0 as _) };
-            }
-        }
+        // if !self.is_valid() {
+        //     log::trace!("Pointer is not valid. Already deallocated?");
+        //     return;
+        // }
+
+        // log::trace!(
+        //     "Dropping allocated memory: {:?}",
+        //     self as *mut _ as *mut u64 as u64
+        // );
+        // log::trace!("Ptr: {:x?}", self.0);
+        // log::trace!("Type: {:x?}", self.1);
+
+        // TODO: This fails because the memory is still being used. I presume the vmexit didn't work.
+
+        // TODO: Correclty free the memory.
+        // match self.1 {
+        //     AllocType::Aligned => {
+        //         log::trace!("Freeing aligned physical memory");
+        //         unsafe { ExFreePool(self.0 as _) };
+        //     }
+        //     AllocType::Contiguous => {
+        //         log::trace!("Freeing contiguous physical memory");
+        //         unsafe { MmFreeContiguousMemory(self.0 as _) };
+        //     }
+        // }
     }
 }
