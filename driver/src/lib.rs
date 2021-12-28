@@ -7,6 +7,7 @@
 #![feature(untagged_unions)]
 #![feature(decl_macro)]
 #![feature(arbitrary_self_types)]
+#![feature(const_mut_refs)]
 
 use crate::svm::Processors;
 
@@ -64,7 +65,7 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
+    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
 
     log::info!("Hello from amd_hypervisor!");
 

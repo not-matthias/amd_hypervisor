@@ -1,5 +1,6 @@
 //! Handles everything related to the physical processors.
 
+
 use crate::nt::include::{
     KeGetProcessorNumberFromIndex, KeQueryActiveProcessorCountEx,
     KeRevertToUserGroupAffinityThread, KeSetSystemGroupAffinityThread,
@@ -16,10 +17,10 @@ fn processor_number_from_index(index: u32) -> Option<PROCESSOR_NUMBER> {
     let mut processor_number = MaybeUninit::uninit();
 
     let status = unsafe { KeGetProcessorNumberFromIndex(index, processor_number.as_mut_ptr()) };
-    if !NT_SUCCESS(status) {
-        None
-    } else {
+    if NT_SUCCESS(status) {
         Some(unsafe { processor_number.assume_init() })
+    } else {
+        None
     }
 }
 

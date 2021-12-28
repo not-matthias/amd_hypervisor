@@ -1,13 +1,12 @@
 use crate::nt::addresses::physical_address;
 use crate::nt::include::Context;
-use crate::nt::memory::{AllocatedMemory, PAGE_SIZE};
+use crate::nt::memory::AllocatedMemory;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
 use crate::svm::data::shared_data::SharedData;
+use crate::svm::paging::PAGE_SIZE;
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
-
 use core::arch::asm;
-
 use nt::include::PVOID;
 use x86::controlregs::cr3;
 use x86::msr::wrmsr;
@@ -58,7 +57,7 @@ impl ProcessorData {
 
     pub fn prepare_for_virtualization(
         self: &mut AllocatedMemory<Self>,
-        shared_data: &SharedData,
+        shared_data: &mut SharedData,
         context: Context,
     ) {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L982
@@ -131,8 +130,8 @@ impl ProcessorData {
             //     .control_area
             //     .np_enable
             //     .insert(NpEnable::NESTED_PAGING);
-
             // (*self.ptr()).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+
             (*self.ptr()).guest_vmcb.control_area.ncr3 = cr3();
         };
 

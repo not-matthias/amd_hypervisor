@@ -3,7 +3,7 @@ use crate::svm::data::msr_bitmap::MsrBitmap;
 use crate::svm::data::nested_page_table::NestedPageTable;
 
 pub struct SharedData {
-    pub msr_permission_map: AllocatedMemory<MsrBitmap>,
+    pub msr_permission_map: MsrBitmap,
     pub npt: AllocatedMemory<NestedPageTable>,
 }
 

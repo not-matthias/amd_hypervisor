@@ -18,7 +18,7 @@ impl NestedPageTable {
     }
 
     pub unsafe fn build(
-        self: AllocatedMemory<NestedPageTable>,
+        mut self: AllocatedMemory<NestedPageTable>,
     ) -> AllocatedMemory<NestedPageTable> {
         log::info!("Building nested page tables");
 
@@ -60,5 +60,11 @@ impl NestedPageTable {
         }
 
         self
+    }
+}
+
+impl Drop for NestedPageTable {
+    fn drop(&mut self) {
+        // Do nothing
     }
 }

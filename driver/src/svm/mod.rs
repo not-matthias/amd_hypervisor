@@ -46,16 +46,34 @@ impl Processors {
     }
 
     pub fn virtualize(&mut self) -> bool {
+        log::info!("Virtualizing processors");
+
+        let mut status = true;
         for processor in self.processors.iter_mut() {
-            if !processor.virtualize(&self.shard_data) {
+            // NOTE: We have to execute this in the loop and can't do it in the `virtualize` function
+            // for some reason. If we do, an access violation occurs.
+            //
+            let Some(executor) = ProcessorExecutor::switch_to_processor(processor.id()) else {
+                log::error!("Failed to switch to processor");
+                status = false;
+                break;
+            };
+
+            if !processor.virtualize(&mut self.shard_data) {
                 log::error!("Failed to virtualize processor {}", processor.id());
 
-                // Devirtualize all processors.
-                //
-                self.devirtualize();
-
-                return false;
+                status = false;
+                break;
             }
+
+            core::mem::drop(executor);
+        }
+
+        // Devirtualize if the virtualization failed.
+        //
+        if !status {
+            log::info!("Failed to virtualize processors, devirtualizing.");
+            self.devirtualize();
         }
 
         true
@@ -64,10 +82,18 @@ impl Processors {
     pub fn devirtualize(&mut self) -> bool {
         let mut status = true;
         for processor in self.processors.iter_mut() {
+            let Some(executor) = ProcessorExecutor::switch_to_processor(processor.id()) else {
+                log::error!("Failed to switch to processor");
+                status = false;
+                continue;
+            };
+
             if !processor.devirtualize() {
                 log::error!("Failed to devirtualize processor {}", processor.id());
                 status = false;
             }
+
+            core::mem::drop(executor);
         }
 
         status
@@ -109,13 +135,8 @@ impl Processor {
             .unwrap_or_default()
     }
 
-    pub fn virtualize(&mut self, shared_data: &SharedData) -> bool {
+    pub fn virtualize(&mut self, shared_data: &mut SharedData) -> bool {
         log::info!("Virtualizing processor {}", self.index);
-
-        let Some(executor) = ProcessorExecutor::switch_to_processor(self.index) else {
-            log::error!("Failed to switch to processor");
-            return false
-        };
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
 
@@ -161,29 +182,26 @@ impl Processor {
             unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
         }
 
-        log::warn!("Processor {} is now virtualized", self.index);
-
-        core::mem::drop(executor);
-
         true
+
+        // log::info!("Processor {} is now virtualized", self.index);
+        //
+        // true
     }
 
     pub fn devirtualize(&self) -> bool {
-        let Some(executor) = ProcessorExecutor::switch_to_processor(self.index) else {
-            log::error!("Failed to switch to processor");
-            return false
-        };
-
         // Already devirtualized? Then we don't need to do anything.
         //
         let result = cpuid!(CPUID_DEVIRTUALIZE, CPUID_DEVIRTUALIZE);
         if result.ecx != 0xDEADBEEF {
+            log::info!(
+                "Ecx is not 0xDEADBEEF. Nothing to do. Ecx: {:x}",
+                result.ecx
+            );
             return true;
         }
 
         log::info!("Processor {} has been devirtualized", self.index);
-
-        core::mem::drop(executor);
 
         true
     }

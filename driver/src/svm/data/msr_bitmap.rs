@@ -1,7 +1,7 @@
 use crate::nt::include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP};
-use crate::nt::memory::{AllocatedMemory, PAGE_SIZE};
+use crate::nt::memory::AllocatedMemory;
+use crate::svm::paging::PAGE_SIZE;
 use core::mem::MaybeUninit;
-use nt::include::PVOID;
 use x86::msr::IA32_EFER;
 
 pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc0010117;
@@ -13,19 +13,17 @@ pub const SECOND_MSRPM_OFFSET: u32 = 0x800 * CHAR_BIT;
 
 pub const SVM_MSR_PERMISSIONS_MAP_SIZE: u32 = (PAGE_SIZE * 2) as u32;
 
-pub struct MsrBitmap {
-    pub bitmap: PVOID,
-}
+pub struct MsrBitmap(AllocatedMemory<u32>);
 
 impl MsrBitmap {
-    pub fn new() -> Option<AllocatedMemory<Self>> {
+    pub fn new() -> Option<Self> {
         // The MSR permissions bitmap consists of four separate bit vectors of 16
         // Kbits (2 Kbytes) each. See: `15.11 - MSR Intercepts`.
         //
-        AllocatedMemory::alloc_contiguous(PAGE_SIZE * 2)
+        Some(Self(AllocatedMemory::alloc_contiguous(PAGE_SIZE * 2)?))
     }
 
-    pub fn build(self: AllocatedMemory<Self>) -> AllocatedMemory<Self> {
+    pub fn build(mut self) -> Self {
         log::info!("Building msr permission bitmap");
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
@@ -38,7 +36,7 @@ impl MsrBitmap {
         unsafe {
             RtlInitializeBitMap(
                 bitmap_header_ptr as _,
-                self.ptr() as _,
+                self.0.ptr() as _,
                 (SVM_MSR_PERMISSIONS_MAP_SIZE * CHAR_BIT) as u32,
             )
         }
@@ -57,5 +55,9 @@ impl MsrBitmap {
         unsafe { RtlSetBits(bitmap_header_ptr as _, (offset + 1) as u32, 1) };
 
         self
+    }
+
+    pub fn ptr(&mut self) -> *mut u32 {
+        self.0.ptr()
     }
 }
