@@ -1,6 +1,6 @@
 use crate::debug::dbg_break;
 use crate::nt::addresses::physical_address;
-use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
+use crate::nt::include::{KeBugCheck, KeGetCurrentIrql, MANUALLY_INITIATED_CRASH};
 use crate::svm::data::guest::{GuestContext, GuestRegisters};
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
@@ -54,15 +54,17 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
             cpuid.ecx = 0;
             cpuid.edx = 0;
         }
-        CPUID_DEVIRTUALIZE if subleaf == CPUID_DEVIRTUALIZE => {
-            // Only allow unloading of the hypervisor in kernel mode.
-            //
-            const DPL_SYSTEM: u64 = 0;
-            let segment =
-                SegmentDescriptor(unsafe { (*data).guest_vmcb.save_area.ss_attrib } as u64);
-            if segment.get_dpl() == DPL_SYSTEM {
-                guest_context.exit_vm = true;
-            }
+        CPUID_DEVIRTUALIZE => {
+            if subleaf == CPUID_DEVIRTUALIZE {
+                // Only allow unloading of the hypervisor in kernel mode.
+                //
+                const DPL_SYSTEM: u64 = 0;
+                let segment =
+                    SegmentDescriptor(unsafe { (*data).guest_vmcb.save_area.ss_attrib } as u64);
+                if segment.get_dpl() == DPL_SYSTEM {
+                    guest_context.exit_vm = true;
+                }
+            };
         }
         _ => {}
     }
@@ -76,6 +78,10 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
         (*guest_context.guest_regs).rdx = cpuid.edx as u64;
     }
 
+    if unsafe { KeGetCurrentIrql() } <= 2 {
+        log::info!("Cpuid: {:x?}", cpuid);
+    }
+
     // Then, advance RIP to "complete" the instruction.
     //
     unsafe { (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip };
@@ -87,33 +93,53 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
 
     // Prevent IA32_EFER from being modified
     //
-    // if msr == IA32_EFER {
-    //     // TODO: Implement
-    //     //
-    // } else {
-    //     //
-    //     //
-    // }
+    if msr == IA32_EFER {
+        assert!(write_access);
 
-    // Execute rdmsr or wrmsr as requested by the guest.
-    //
-    // Important: This can bug check if the guest tries to access an MSR that is not supported by
-    //            the host. See SimpleSvm for more information on how to handle this correctly.
-    //
-    if write_access {
         let low_part = unsafe { (*guest_context.guest_regs).rax as u32 };
         let high_part = unsafe { (*guest_context.guest_regs).rdx as u32 };
-
         let value = (high_part as u64) << 32 | low_part as u64;
 
-        unsafe { wrmsr(msr, value) };
+        // The guest is trying to enable SVM.
+        //
+        // Inject a #GP exception if the guest attempts to clear the flag. The
+        // protection of this bit is required because clearing it would result
+        // in undefined behavior.
+        //
+        if value & EFER_SVME != 0 {
+            EventInjection::gp().inject(data);
+        }
+
+        // Otherwise, update the msr as requested.
+        //
+        // Note: The value should be checked beforehand to not allow any illegal values
+        // and inject a #GP as needed. If that is not done, the hypervisor attempts to resume
+        // the guest with an invalid EFER value and immediately receives #VMEXIT due to VMEXIT_INVALID.
+        // This would in this case, result in a bug check.
+        //
+        // See `Extended Feature Enable Register (EFER)` for what values are allowed.
+        // TODO: Implement this check
+        //
+        unsafe { (*data).guest_vmcb.save_area.efer = value };
     } else {
-        let value = unsafe { rdmsr(msr) };
+        // Execute rdmsr or wrmsr as requested by the guest.
+        //
+        // Important: This can bug check if the guest tries to access an MSR that is not supported by
+        //            the host. See SimpleSvm for more information on how to handle this correctly.
+        //
+        if write_access {
+            let low_part = unsafe { (*guest_context.guest_regs).rax as u32 };
+            let high_part = unsafe { (*guest_context.guest_regs).rdx as u32 };
 
-        // TODO: Check if `value as u32` is the same as `value & u32::MAX`
+            let value = (high_part as u64) << 32 | low_part as u64;
 
-        unsafe { (*guest_context.guest_regs).rax = (value as u32) as u64 };
-        unsafe { (*guest_context.guest_regs).rdx = (value >> 32) as u64 };
+            unsafe { wrmsr(msr, value) };
+        } else {
+            let value = unsafe { rdmsr(msr) };
+
+            unsafe { (*guest_context.guest_regs).rax = (value as u32) as u64 };
+            unsafe { (*guest_context.guest_regs).rdx = (value >> 32) as u64 };
+        }
     }
 
     // Then, advance RIP to "complete" the instruction.
@@ -164,6 +190,10 @@ unsafe extern "stdcall" fn handle_vmexit(
         }
         _ => {
             // Invalid #VMEXIT. This should never happen.
+            //
+            // If it does happen, then it's very likely due to a misconfigured
+            // control state.
+            //
 
             dbg_break!();
 
@@ -178,6 +208,9 @@ unsafe extern "stdcall" fn handle_vmexit(
         // - rbx = address to return
         // - rcx = stack pointer to restore
         //
+        (*guest_context.guest_regs).rax = data as u32 as u64;
+        (*guest_context.guest_regs).rdx = data as u64 >> 32;
+
         (*guest_context.guest_regs).rbx = (*data).guest_vmcb.control_area.nrip;
         (*guest_context.guest_regs).rcx = (*data).guest_vmcb.save_area.rsp;
 
