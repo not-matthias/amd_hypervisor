@@ -56,8 +56,10 @@ static mut PROCESSORS: Option<Processors> = None;
 pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     // Devirtualize all processors and drop the global struct.
     //
-    if let Some(processors) = unsafe { PROCESSORS.as_mut() } {
+    if let Some(mut processors) = unsafe { PROCESSORS.take() } {
         processors.devirtualize();
+
+        core::mem::drop(processors);
     }
 }
 

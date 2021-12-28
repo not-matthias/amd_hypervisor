@@ -1,6 +1,5 @@
 //! Everything related to memory.
 
-
 use crate::nt::include::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
@@ -102,20 +101,8 @@ impl<T> AllocatedMemory<T> {
     }
 
     /// Frees the underlying memory.
-    pub fn free(mut self) {
-        if !self.is_valid() {
-            log::trace!("Pointer is not valid. Already deallocated?");
-            return;
-        }
-
-        match self.1 {
-            AllocType::Aligned => {
-                unsafe { ExFreePool(self.0 as _) };
-            }
-            AllocType::Contiguous => {
-                unsafe { MmFreeContiguousMemory(self.0 as _) };
-            }
-        }
+    pub fn free(self) {
+        core::mem::drop(self);
     }
 
     /// Returns a pointer to the underlying memory.
@@ -145,30 +132,20 @@ impl<T> DerefMut for AllocatedMemory<T> {
 
 impl<T> Drop for AllocatedMemory<T> {
     fn drop(&mut self) {
-        // if !self.is_valid() {
-        //     log::trace!("Pointer is not valid. Already deallocated?");
-        //     return;
-        // }
+        if !self.is_valid() {
+            log::trace!("Pointer is not valid. Already deallocated?");
+            return;
+        }
 
-        // log::trace!(
-        //     "Dropping allocated memory: {:?}",
-        //     self as *mut _ as *mut u64 as u64
-        // );
-        // log::trace!("Ptr: {:x?}", self.0);
-        // log::trace!("Type: {:x?}", self.1);
+        log::trace!("Freeing physical memory: {:p} - {:?}", self.0, self.1);
 
-        // TODO: This fails because the memory is still being used. I presume the vmexit didn't work.
-
-        // TODO: Correclty free the memory.
-        // match self.1 {
-        //     AllocType::Aligned => {
-        //         log::trace!("Freeing aligned physical memory");
-        //         unsafe { ExFreePool(self.0 as _) };
-        //     }
-        //     AllocType::Contiguous => {
-        //         log::trace!("Freeing contiguous physical memory");
-        //         unsafe { MmFreeContiguousMemory(self.0 as _) };
-        //     }
-        // }
+        match self.1 {
+            AllocType::Aligned => {
+                unsafe { ExFreePool(self.0 as _) };
+            }
+            AllocType::Contiguous => {
+                unsafe { MmFreeContiguousMemory(self.0 as _) };
+            }
+        }
     }
 }
