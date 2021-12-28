@@ -5,10 +5,11 @@ use crate::nt::processor::{processor_count, ProcessorExecutor};
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorDataWrapper;
 use crate::svm::data::shared_data::SharedData;
+use crate::svm::vmexit::CPUID_DEVIRTUALIZE;
 use crate::svm::vmlaunch::launch_vm;
 use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
 use alloc::vec::Vec;
-use x86::cpuid::{CpuId, Hypervisor};
+use x86::cpuid::{cpuid, CpuId, Hypervisor};
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod data;
@@ -52,6 +53,17 @@ impl Processors {
 
         true
     }
+
+    pub fn devirtualize(&mut self) -> bool {
+        for processor in self.processors.iter_mut() {
+            if !processor.devirtualize() {
+                log::error!("Failed to devirtualize processor {}", processor.id());
+                return false;
+            }
+        }
+
+        true
+    }
 }
 
 pub struct Processor {
@@ -81,10 +93,6 @@ impl Processor {
             .map(|hv_info| match hv_info.identify() {
                 Hypervisor::Unknown(ebx, ecx, edx) => {
                     log::info!("Found unknown hypervisor: {:x} {:x} {:x}", ebx, ecx, edx);
-
-                    dbg_break!();
-
-                    // TODO: Only allow our hypervisor
 
                     ebx == 0x42 && ecx == 0x42 && edx == 0x42
                 }
@@ -159,8 +167,28 @@ impl Processor {
         true
     }
 
-    pub fn devirtualize(&self) {
-        // TODO: Call cpuid with custom parameters
+    pub fn devirtualize(&self) -> bool {
+        let Some(executor) = ProcessorExecutor::switch_to_processor(self.index) else {
+            log::error!("Failed to switch to processor");
+            return false
+        };
+
+        // Already devirtualized? Then we don't need to do anything.
+        //
+        let result = cpuid!(CPUID_DEVIRTUALIZE, CPUID_DEVIRTUALIZE);
+        if result.ecx != 0xDEADBEEF {
+            return true;
+        }
+
+        log::info!("Processor {} has been devirtualized", self.index);
+
+        // Free per processor data
+        //
+        // TODO: Do we have to do this from here? We can literally call drop on the processor and free it like that.
+
+        core::mem::drop(executor);
+
+        true
     }
 
     pub fn id(&self) -> u32 {

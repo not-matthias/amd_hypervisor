@@ -24,7 +24,6 @@ pub struct HostStackLayout {
     pub guest_vmcb_pa: u64,
     pub host_vmcb_pa: u64,
 
-    // TODO: Can we somehow circumvent these pointer?
     pub self_data: *mut ProcessorData,
     pub shared_data: *const SharedData,
 

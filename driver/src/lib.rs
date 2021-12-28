@@ -8,7 +8,7 @@
 #![feature(decl_macro)]
 
 use crate::svm::Processors;
-use core::mem::ManuallyDrop;
+
 use core::panic::PanicInfo;
 
 use crate::debug::dbg_break;
@@ -49,10 +49,16 @@ static GLOBAL: KernelAlloc = KernelAlloc;
 
 static LOGGER: KernelLogger = KernelLogger;
 
+static mut PROCESSORS: Option<Processors> = None;
+
 pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
-    // Devirtualize all processors
+    // Devirtualize all processors and drop the global struct.
     //
-    // TODO: Implement
+    if let Some(mut processors) = unsafe { PROCESSORS.take() } {
+        processors.devirtualize();
+
+        core::mem::drop(processors);
+    }
 }
 
 #[no_mangle]
@@ -70,17 +76,18 @@ pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTST
 
     // Virtualize processors
     //
-    let Some(processors) = Processors::new() else {
+    let Some(mut processors) = Processors::new() else {
         log::info!("Failed to create processors");
         return STATUS_UNSUCCESSFUL;
     };
-    let mut processors = ManuallyDrop::new(processors);
 
     if !processors.virtualize() {
         log::error!("Failed to virtualize processors");
     }
 
-    // TODO: Devirtualize and free memory when failing (and when unloading)
+    // Save the processors for later use
+    //
+    unsafe { PROCESSORS = Some(processors) };
 
     STATUS_SUCCESS
 }

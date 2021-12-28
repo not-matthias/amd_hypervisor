@@ -1,12 +1,18 @@
 use crate::debug::dbg_break;
+use crate::nt::addresses::physical_address;
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::svm::data::guest::{GuestContext, GuestRegisters};
+use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
+use crate::svm::data::segmentation::SegmentDescriptor;
 use crate::svm::events::EventInjection;
 use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
 use x86::cpuid::cpuid;
-use x86::msr::{rdmsr, wrmsr};
+use x86::msr::{rdmsr, wrmsr, IA32_EFER};
+use x86_64::instructions::interrupts;
+
+pub const CPUID_DEVIRTUALIZE: u64 = 0x41414141;
 
 pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) {
     // Execute cpuid as requested
@@ -53,6 +59,16 @@ pub fn handle_cpuid(data: *mut ProcessorData, guest_context: &mut GuestContext) 
             cpuid.ebx = 0;
             cpuid.ecx = 0;
             cpuid.edx = 0;
+        }
+        CPUID_DEVIRTUALIZE if subleaf == CPUID_DEVIRTUALIZE => {
+            // Only allow unloading of the hypervisor in kernel mode.
+            //
+            const DPL_SYSTEM: u64 = 0;
+            let segment =
+                SegmentDescriptor(unsafe { (*data).guest_vmcb.save_area.ss_attrib } as u64);
+            if segment.get_dpl() == DPL_SYSTEM {
+                guest_context.exit_vm = true;
+            }
         }
         _ => {}
     }
@@ -161,7 +177,45 @@ unsafe extern "stdcall" fn handle_vmexit(
         }
     }
 
-    // Terminate hypervisor if requested. TODO: Implement
+    // Terminate hypervisor if requested.
+    //
+    if guest_context.exit_vm {
+        // Set return values of cpuid as follows:
+        // - rbx = address to return
+        // - rcx = stack pointer to restore
+        // - edx:eax = address of the per processor data to be freed by the caller (TODO: I think we can remove this)
+        //
+        (*guest_context.guest_regs).rax = data as u64 & u32::MAX as u64;
+        (*guest_context.guest_regs).rbx = (*data).guest_vmcb.control_area.nrip;
+        (*guest_context.guest_regs).rcx = (*data).guest_vmcb.save_area.rsp;
+        (*guest_context.guest_regs).rdx = data as u64 >> 32;
+
+        // Load guest state (currently host state is loaded)
+        ////
+        let guest_vmcb_pa = physical_address(&(*data).guest_vmcb as *const _ as _).as_u64();
+        asm!("vmload rax", in("rax") guest_vmcb_pa);
+
+        // TODO: ??? Why do we need this?
+        //
+        interrupts::disable();
+        asm!("stgi");
+
+        // Disable svm and restore guest RFLAGS.
+        //
+        let msr = rdmsr(IA32_EFER) & !EFER_SVME;
+        wrmsr(IA32_EFER, msr);
+
+        // Write to eflags
+        //
+        // See:
+        // - https://docs.microsoft.com/en-us/cpp/intrinsics/writeeflags
+        // - https://www.felixcloutier.com/x86/popf:popfd:popfq
+        //
+        let eflags = (*data).guest_vmcb.save_area.rflags;
+        asm!("push {}; popfq", in(reg) eflags);
+
+        return true as u8;
+    }
 
     // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
     // RAX is loaded from VMCB on VMRUN.
