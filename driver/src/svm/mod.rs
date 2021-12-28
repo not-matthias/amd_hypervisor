@@ -70,7 +70,7 @@ pub struct Processor {
     /// The index of the processor.
     index: u32,
 
-    data: ProcessorDataWrapper,
+    processor_data: ProcessorDataWrapper,
 }
 
 impl Processor {
@@ -79,7 +79,7 @@ impl Processor {
 
         Some(Self {
             index,
-            data: ProcessorDataWrapper::new()?,
+            processor_data: ProcessorDataWrapper::new()?,
         })
     }
 
@@ -137,7 +137,8 @@ impl Processor {
             // Setup vmcb
             //
             log::info!("Prepared vmcb for virtualization");
-            self.data.prepare_for_virtualization(shared_data, context);
+            self.processor_data
+                .prepare_for_virtualization(shared_data, context);
 
             // Launch vm
             // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
@@ -150,7 +151,7 @@ impl Processor {
             // 2. The npt is not setup correctly.
             // 3. ???
 
-            let host_rsp = unsafe { &(*self.data.data).host_stack_layout.guest_vmcb_pa };
+            let host_rsp = unsafe { &(***self.processor_data).host_stack_layout.guest_vmcb_pa };
             let host_rsp = host_rsp as *const u64 as u64;
             unsafe { launch_vm(host_rsp) };
 

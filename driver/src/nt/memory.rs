@@ -4,6 +4,7 @@ use crate::nt::include::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
+use core::ops::{Deref, DerefMut};
 use winapi::shared::ntdef::PVOID;
 use winapi::um::winnt::RtlZeroMemory;
 use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
@@ -30,49 +31,76 @@ macro_rules! page_align {
     };
 }
 
-/// Allocates page aligned, zero filled physical memory.
-pub fn alloc_aligned(bytes: usize) -> Option<PVOID> {
-    log::trace!("Allocating {} bytes of aligned physical memory", bytes);
+pub struct AlignedMemory<T>(*mut T);
 
-    // The size must equal/greater than a page, to align it to a page
-    //
-    if bytes < PAGE_SIZE {
-        log::warn!("Allocating memory failed: size is smaller than a page");
-        return None;
+impl<T> AlignedMemory<T> {
+    /// Allocates page aligned, zero filled physical memory.
+    pub fn alloc(bytes: usize) -> Option<Self> {
+        log::trace!("Allocating {} bytes of aligned physical memory", bytes);
+
+        // The size must equal/greater than a page, to align it to a page
+        //
+        if bytes < PAGE_SIZE {
+            log::warn!("Allocating memory failed: size is smaller than a page");
+            return None;
+        }
+
+        // Allocate memory
+        //
+        let memory = unsafe { ExAllocatePool(NonPagedPool, bytes) };
+        if memory.is_null() {
+            log::warn!("Failed to allocate memory");
+            return None;
+        }
+
+        // Make sure it's aligned
+        //
+        if page_align!(memory as usize) != memory as usize {
+            log::warn!("Memory is not aligned to a page");
+            return None;
+        }
+
+        // Zero the memory
+        //
+        unsafe { RtlZeroMemory(memory, bytes) };
+
+        Some(Self(memory as *mut T))
     }
 
-    // Allocate memory
-    //
-    let memory = unsafe { ExAllocatePool(NonPagedPool, bytes) };
-    if memory.is_null() {
-        log::warn!("Failed to allocate memory");
-        return None;
+    /// Frees the underlying memory.
+    pub fn free(self) {
+        unsafe { ExFreePool(self.0 as _) };
     }
-
-    // Make sure it's aligned
-    //
-    if page_align!(memory as usize) != memory as usize {
-        log::warn!("Memory is not aligned to a page");
-        return None;
-    }
-
-    // Zero the memory
-    //
-    unsafe { RtlZeroMemory(memory, bytes) };
-
-    Some(memory)
 }
 
-/// Frees the allocated memory.
-pub fn free_aligned(address: PVOID) {
-    unsafe { ExFreePool(address) }
+impl<T> Deref for AlignedMemory<T> {
+    type Target = *mut T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> DerefMut for AlignedMemory<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> Drop for AlignedMemory<T> {
+    fn drop(&mut self) {
+        // TODO: Can we somehow capture self here?
+
+        log::trace!("Freeing aligned physical memory");
+        unsafe { ExFreePool(self.0 as _) };
+    }
 }
 
 /// Allocates page aligned, zero filled contiguous physical memory.
 ///
 /// # What is contiguous memory?
 /// Click [here](https://stackoverflow.com/questions/4059363/what-is-a-contiguous-memory-block).
-pub fn alloc_contiguous(bytes: usize) -> Option<PVOID> {
+pub fn alloc_contiguous(bytes: usize) -> Option<*mut u64> {
     log::trace!("Allocating {} bytes of contiguous physical memory", bytes);
 
     let mut boundary: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
@@ -104,10 +132,10 @@ pub fn alloc_contiguous(bytes: usize) -> Option<PVOID> {
     //
     unsafe { RtlZeroMemory(memory, bytes) };
 
-    Some(memory)
+    Some(memory as *mut u64)
 }
 
 /// Frees the previously allocated contiguous memory.
-pub fn free_contiguous(address: PVOID) {
-    unsafe { MmFreeContiguousMemory(address) }
+pub fn free_contiguous(address: *mut u64) {
+    unsafe { MmFreeContiguousMemory(address as _) }
 }

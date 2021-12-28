@@ -1,9 +1,9 @@
 use crate::svm::data::msr_bitmap::MsrBitmap;
-use crate::svm::data::nested_page_table::NestedPageTable;
+use crate::svm::data::nested_page_table::NestedPageTableWrapper;
 
 pub struct SharedData {
     pub msr_permission_map: MsrBitmap,
-    pub npt: NestedPageTable,
+    pub npt: NestedPageTableWrapper,
 }
 
 impl SharedData {
@@ -12,7 +12,7 @@ impl SharedData {
 
         Some(Self {
             msr_permission_map: MsrBitmap::new()?.build(),
-            npt: unsafe { NestedPageTable::new()?.build() },
+            npt: unsafe { NestedPageTableWrapper::new()?.build() },
         })
     }
 }

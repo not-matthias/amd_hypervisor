@@ -1,5 +1,5 @@
 use crate::nt::include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP};
-use crate::nt::memory::{alloc_contiguous, PAGE_SIZE};
+use crate::nt::memory::{alloc_contiguous, free_contiguous, PAGE_SIZE};
 use core::mem::MaybeUninit;
 use nt::include::PVOID;
 use x86::msr::IA32_EFER;
@@ -66,5 +66,12 @@ impl MsrBitmap {
         unsafe { RtlSetBits(bitmap_header_ptr as _, (offset + 1) as u32, 1) };
 
         self
+    }
+}
+
+impl Drop for MsrBitmap {
+    fn drop(&mut self) {
+        log::info!("Dropping msr permission bitmap");
+        free_contiguous(self.bitmap as _);
     }
 }

@@ -1,12 +1,13 @@
-use crate::nt::memory::{alloc_aligned, PAGE_SIZE};
-use crate::svm::data::shared_data::SharedData;
-use core::arch::asm;
-
 use crate::nt::addresses::physical_address;
 use crate::nt::include::Context;
+use crate::nt::memory::{AlignedMemory, PAGE_SIZE};
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
+use crate::svm::data::shared_data::SharedData;
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
+use aligned::Aligned;
+use core::arch::asm;
+use core::ops::{Deref, DerefMut};
 use nt::include::PVOID;
 use x86::controlregs::cr3;
 use x86::msr::wrmsr;
@@ -51,18 +52,14 @@ pub struct ProcessorData {
 }
 
 impl ProcessorData {
-    pub fn new() -> Option<*mut Self> {
-        let Some(memory) = alloc_aligned(core::mem::size_of::<Self>()) else {
-            log::warn!("Failed to allocate memory for ProcessorData");
-            return None;
-        };
-
-        Some(memory as *mut Self)
+    pub fn new() -> Option<AlignedMemory<Self>> {
+        AlignedMemory::alloc(core::mem::size_of::<Self>())
     }
 }
 
+// TODO: Remove this wrapper and just use `ProcessorData::prepare(memory)` instead
 pub struct ProcessorDataWrapper {
-    pub data: *mut ProcessorData,
+    pub data: AlignedMemory<ProcessorData>,
 }
 
 impl ProcessorDataWrapper {
@@ -75,12 +72,12 @@ impl ProcessorDataWrapper {
 
         // Get physical addresses of important data structures
         //
-        let guest_vmcb_pa = physical_address(unsafe { &(*self.data).guest_vmcb as *const _ as _ });
-        let host_vmcb_pa = physical_address(unsafe { &(*self.data).host_vmcb as *const _ as _ });
+        let guest_vmcb_pa = physical_address(unsafe { &(**self.data).guest_vmcb as *const _ as _ });
+        let host_vmcb_pa = physical_address(unsafe { &(**self.data).host_vmcb as *const _ as _ });
         let host_state_area_pa =
-            physical_address(unsafe { (*self.data).host_state_area.as_ptr() as *const _ });
+            physical_address(unsafe { (**self.data).host_state_area.as_ptr() as *const _ });
         let pml4_pa =
-            physical_address(unsafe { (*shared_data.npt.data).pml4_entries.as_ptr() as *const _ });
+            physical_address(unsafe { (**shared_data.npt.data).pml4_entries.as_ptr() as *const _ });
         let msr_pm_pa = physical_address(shared_data.msr_permission_map.bitmap as *const _);
 
         log::info!("Physical addresses:");
@@ -96,13 +93,13 @@ impl ProcessorDataWrapper {
         //
         log::info!("Configuring instructions to intercept");
         unsafe {
-            (*self.data)
+            (**self.data)
                 .guest_vmcb
                 .control_area
                 .intercept_misc1
                 .insert(InterceptMisc1::INTERCEPT_CPUID);
 
-            (*self.data)
+            (**self.data)
                 .guest_vmcb
                 .control_area
                 .intercept_misc2
@@ -112,13 +109,13 @@ impl ProcessorDataWrapper {
         // Trigger #VMEXIT on MSR exit as defined in msr permission map.
         //
         unsafe {
-            (*self.data)
+            (**self.data)
                 .guest_vmcb
                 .control_area
                 .intercept_misc1
                 .insert(InterceptMisc1::INTERCEPT_MSR_PROT);
 
-            (*self.data).guest_vmcb.control_area.msrpm_base_pa = msr_pm_pa.as_u64();
+            (**self.data).guest_vmcb.control_area.msrpm_base_pa = msr_pm_pa.as_u64();
         };
 
         // Specify guest's address space ID (ASID). TLB is maintained by the ID for
@@ -130,26 +127,26 @@ impl ProcessorDataWrapper {
         //
         // See this for explanation of what an ASID is: https://stackoverflow.com/a/52725044
         //
-        unsafe { (*self.data).guest_vmcb.control_area.guest_asid = 1 };
+        unsafe { (**self.data).guest_vmcb.control_area.guest_asid = 1 };
 
         // Enable nested page tables.
         //
         log::info!("Configuring nested page tables");
         unsafe {
-            // (*self.data)
+            // (**self.data)
             //     .guest_vmcb
             //     .control_area
             //     .np_enable
             //     .insert(NpEnable::NESTED_PAGING);
 
-            // (*self.data).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
-            (*self.data).guest_vmcb.control_area.ncr3 = cr3();
+            // (**self.data).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+            (**self.data).guest_vmcb.control_area.ncr3 = cr3();
         };
 
         // Setup guest state based on current system state.
         //
         log::info!("Configuring guest state save area");
-        unsafe { (*self.data).guest_vmcb.save_area.build(context) };
+        unsafe { (**self.data).guest_vmcb.save_area.build(context) };
 
         // Save some of the current state on VMCB.
         //
@@ -164,11 +161,11 @@ impl ProcessorDataWrapper {
         //
         log::info!("Setting up the stack layout");
         unsafe {
-            (*self.data).host_stack_layout.reserved_1 = u64::MAX;
-            (*self.data).host_stack_layout.shared_data = shared_data as *const _;
-            (*self.data).host_stack_layout.self_data = self.data;
-            (*self.data).host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
-            (*self.data).host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
+            (**self.data).host_stack_layout.reserved_1 = u64::MAX;
+            (**self.data).host_stack_layout.shared_data = shared_data as *const _;
+            (**self.data).host_stack_layout.self_data = *self.data as _;
+            (**self.data).host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
+            (**self.data).host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
         }
 
         // Set the physical address for the `vmrun` instruction, which will save
@@ -182,5 +179,19 @@ impl ProcessorDataWrapper {
         //
         log::info!("Saving current host state on VMCB");
         unsafe { asm!("vmsave rax", in("rax") host_vmcb_pa.as_u64()) };
+    }
+}
+
+impl Deref for ProcessorDataWrapper {
+    type Target = AlignedMemory<ProcessorData>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl DerefMut for ProcessorDataWrapper {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.data
     }
 }

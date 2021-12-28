@@ -1,65 +1,58 @@
 use crate::nt::addresses::aligned_physical_address;
+use aligned::Aligned;
 
-use crate::nt::memory::alloc_aligned;
+use crate::nt::memory::AlignedMemory;
 use crate::svm::paging::LegacyPDE;
 use x86::bits64::paging::PDPTEntry;
 use x86::bits64::paging::{PDPTFlags, PML4Entry, PML4Flags};
 
 #[repr(C, align(4096))]
-pub struct NestedPageTableData {
+pub struct NestedPageTable {
     pub pml4_entries: [PML4Entry; 1],
     pub pdp_entries: [PDPTEntry; 512],
     pub pd_entries: [[LegacyPDE; 512]; 512],
 }
 
-impl NestedPageTableData {
-    pub fn new() -> Option<*mut Self> {
-        // Allocate shared data
-        //
-        let memory = alloc_aligned(core::mem::size_of::<NestedPageTableData>());
-        if memory.is_none() {
-            log::warn!("Failed to allocate nested page table data");
-            return None;
-        }
-        log::trace!("Allocated memory for nested page table: {:x?}", memory);
-
-        Some(memory? as *mut NestedPageTableData)
+impl NestedPageTable {
+    pub fn new() -> Option<AlignedMemory<Self>> {
+        AlignedMemory::alloc(core::mem::size_of::<NestedPageTable>())
     }
 }
 
-pub struct NestedPageTable {
-    pub data: *mut NestedPageTableData,
+pub struct NestedPageTableWrapper {
+    pub data: AlignedMemory<NestedPageTable>,
 }
 
-impl NestedPageTable {
+// TODO: Remove wrapper
+impl NestedPageTableWrapper {
     pub fn new() -> Option<Self> {
-        Some(NestedPageTable {
-            data: NestedPageTableData::new()?,
+        Some(NestedPageTableWrapper {
+            data: NestedPageTable::new()?,
         })
     }
 
     pub unsafe fn build(mut self) -> Self {
         log::info!("Building nested page tables");
 
-        let pdp_base_pa = aligned_physical_address((*self.data).pdp_entries.as_mut_ptr() as _);
+        let pdp_base_pa = aligned_physical_address((**self.data).pdp_entries.as_mut_ptr() as _);
 
         let flags = PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]);
         let entry = PML4Entry::new(pdp_base_pa, flags);
-        (*self.data).pml4_entries[0] = entry;
+        (**self.data).pml4_entries[0] = entry;
 
         // One PML4 entry controls 512 page directory pointer entries.
         //
         for i in 0..512 {
             log::trace!("Setting pdp entry {}", i);
 
-            let pde_address = &mut (*self.data).pd_entries[i][0];
+            let pde_address = &mut (**self.data).pd_entries[i][0];
             let pde_address = pde_address as *mut LegacyPDE as *mut u64;
             let pde_base_pa = aligned_physical_address(pde_address);
 
             let flags = PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]);
             let entry = PDPTEntry::new(pde_base_pa, flags);
 
-            (*self.data).pdp_entries[i] = entry;
+            (**self.data).pdp_entries[i] = entry;
 
             for j in 0..512 {
                 let translation_pa = (i * 512) + j;
@@ -70,11 +63,11 @@ impl NestedPageTable {
                 //     PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::PS]),
                 // );
 
-                (*self.data).pd_entries[i][j].set_page_frame_number(translation_pa as u64);
-                (*self.data).pd_entries[i][j].set_valid(1);
-                (*self.data).pd_entries[i][j].set_write(1);
-                (*self.data).pd_entries[i][j].set_user(1);
-                (*self.data).pd_entries[i][j].set_large_page(1);
+                (**self.data).pd_entries[i][j].set_page_frame_number(translation_pa as u64);
+                (**self.data).pd_entries[i][j].set_valid(1);
+                (**self.data).pd_entries[i][j].set_write(1);
+                (**self.data).pd_entries[i][j].set_user(1);
+                (**self.data).pd_entries[i][j].set_large_page(1);
             }
         }
 
