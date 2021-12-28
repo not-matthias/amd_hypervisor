@@ -10,7 +10,5 @@ pub fn physical_address(ptr: *const u64) -> PAddr {
 }
 
 pub fn aligned_physical_address(ptr: *mut u64) -> PAddr {
-    let physical_address = physical_address(ptr);
-
-    PAddr::from(physical_address).align_down_to_base_page()
+    physical_address(ptr).align_down_to_base_page()
 }
