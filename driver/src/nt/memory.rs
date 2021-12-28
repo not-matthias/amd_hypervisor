@@ -31,11 +31,16 @@ macro_rules! page_align {
     };
 }
 
-pub struct AlignedMemory<T>(*mut T);
+pub enum AllocType {
+    Aligned,
+    Contiguous,
+}
 
-impl<T> AlignedMemory<T> {
+pub struct AllocatedMemory<T>(*mut T, AllocType);
+
+impl<T> AllocatedMemory<T> {
     /// Allocates page aligned, zero filled physical memory.
-    pub fn alloc(bytes: usize) -> Option<Self> {
+    pub fn alloc_aligned(bytes: usize) -> Option<Self> {
         log::trace!("Allocating {} bytes of aligned physical memory", bytes);
 
         // The size must equal/greater than a page, to align it to a page
@@ -64,12 +69,58 @@ impl<T> AlignedMemory<T> {
         //
         unsafe { RtlZeroMemory(memory, bytes) };
 
-        Some(Self(memory as *mut T))
+        Some(Self(memory as *mut T, AllocType::Aligned))
+    }
+
+    /// Allocates page aligned, zero filled contiguous physical memory.
+    ///
+    /// # What is contiguous memory?
+    /// Click [here](https://stackoverflow.com/questions/4059363/what-is-a-contiguous-memory-block).
+    pub fn alloc_contiguous(bytes: usize) -> Option<Self> {
+        log::trace!("Allocating {} bytes of contiguous physical memory", bytes);
+
+        let mut boundary: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
+        let mut lowest: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
+        let mut highest: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
+
+        unsafe { *(boundary.QuadPart_mut()) = 0 };
+        unsafe { *(lowest.QuadPart_mut()) = 0 };
+        unsafe { *(highest.QuadPart_mut()) = -1 };
+
+        let memory = unsafe {
+            MmAllocateContiguousMemorySpecifyCacheNode(
+                bytes,
+                lowest,
+                highest,
+                boundary,
+                MmCached,
+                MM_ANY_NODE_OK,
+            )
+        };
+
+        // Return `None` if the memory is null
+        //
+        if memory.is_null() {
+            return None;
+        }
+
+        // Zero the memory
+        //
+        unsafe { RtlZeroMemory(memory, bytes) };
+
+        Some(Self(memory as *mut T, AllocType::Contiguous))
     }
 
     /// Frees the underlying memory.
     pub fn free(self) {
-        unsafe { ExFreePool(self.0 as _) };
+        match self.1 {
+            AllocType::Aligned => {
+                unsafe { ExFreePool(self.0 as _) };
+            }
+            AllocType::Contiguous => {
+                unsafe { MmFreeContiguousMemory(self.0 as _) };
+            }
+        }
     }
 
     /// Returns a pointer to the underlying memory.
@@ -83,7 +134,7 @@ impl<T> AlignedMemory<T> {
     }
 }
 
-impl<T> Deref for AlignedMemory<T> {
+impl<T> Deref for AllocatedMemory<T> {
     type Target = *mut T;
 
     fn deref(&self) -> &Self::Target {
@@ -91,61 +142,25 @@ impl<T> Deref for AlignedMemory<T> {
     }
 }
 
-impl<T> DerefMut for AlignedMemory<T> {
+impl<T> DerefMut for AllocatedMemory<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<T> Drop for AlignedMemory<T> {
+impl<T> Drop for AllocatedMemory<T> {
     fn drop(&mut self) {
         // TODO: Can we somehow capture self here?
 
-        log::trace!("Freeing aligned physical memory");
-        unsafe { ExFreePool(self.0 as _) };
+        match self.1 {
+            AllocType::Aligned => {
+                log::trace!("Freeing aligned physical memory");
+                unsafe { ExFreePool(self.0 as _) };
+            }
+            AllocType::Contiguous => {
+                log::trace!("Freeing contiguous physical memory");
+                unsafe { MmFreeContiguousMemory(self.0 as _) };
+            }
+        }
     }
-}
-
-/// Allocates page aligned, zero filled contiguous physical memory.
-///
-/// # What is contiguous memory?
-/// Click [here](https://stackoverflow.com/questions/4059363/what-is-a-contiguous-memory-block).
-pub fn alloc_contiguous(bytes: usize) -> Option<*mut u64> {
-    log::trace!("Allocating {} bytes of contiguous physical memory", bytes);
-
-    let mut boundary: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
-    let mut lowest: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
-    let mut highest: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
-
-    unsafe { *(boundary.QuadPart_mut()) = 0 };
-    unsafe { *(lowest.QuadPart_mut()) = 0 };
-    unsafe { *(highest.QuadPart_mut()) = -1 };
-
-    let memory = unsafe {
-        MmAllocateContiguousMemorySpecifyCacheNode(
-            bytes,
-            lowest,
-            highest,
-            boundary,
-            MmCached,
-            MM_ANY_NODE_OK,
-        )
-    };
-
-    // Return `None` if the memory is null
-    //
-    if memory.is_null() {
-        return None;
-    }
-
-    // Zero the memory
-    //
-    unsafe { RtlZeroMemory(memory, bytes) };
-
-    Some(memory as *mut u64)
-}
-
-/// Frees the previously allocated contiguous memory.
-pub fn free_contiguous(address: *mut u64) {
-    unsafe { MmFreeContiguousMemory(address as _) }
 }

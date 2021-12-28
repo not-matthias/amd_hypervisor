@@ -1,6 +1,6 @@
 use crate::nt::addresses::physical_address;
 use crate::nt::include::Context;
-use crate::nt::memory::{AlignedMemory, PAGE_SIZE};
+use crate::nt::memory::{AllocatedMemory, PAGE_SIZE};
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
 use crate::svm::data::shared_data::SharedData;
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2};
@@ -52,12 +52,12 @@ pub struct ProcessorData {
 }
 
 impl ProcessorData {
-    pub fn new() -> Option<AlignedMemory<Self>> {
-        AlignedMemory::alloc(core::mem::size_of::<Self>())
+    pub fn new() -> Option<AllocatedMemory<Self>> {
+        AllocatedMemory::alloc_aligned(core::mem::size_of::<Self>())
     }
 
     pub fn prepare_for_virtualization(
-        self: &mut AlignedMemory<Self>,
+        self: &mut AllocatedMemory<Self>,
         shared_data: &SharedData,
         context: Context,
     ) {
@@ -70,8 +70,8 @@ impl ProcessorData {
         let host_state_area_pa =
             physical_address(unsafe { (*self.ptr()).host_state_area.as_ptr() as *const _ });
         let pml4_pa =
-            physical_address(unsafe { (**shared_data.npt).pml4_entries.as_ptr() as *const _ });
-        let msr_pm_pa = physical_address(shared_data.msr_permission_map.bitmap as *const _);
+            physical_address(unsafe { (*shared_data.npt.ptr()).pml4_entries.as_ptr() as *const _ });
+        let msr_pm_pa = physical_address(shared_data.msr_permission_map.ptr() as *const _);
 
         log::info!("Physical addresses:");
         log::info!("guest_vmcb_pa: {:x}", guest_vmcb_pa);

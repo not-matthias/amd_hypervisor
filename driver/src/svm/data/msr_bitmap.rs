@@ -1,5 +1,5 @@
 use crate::nt::include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP};
-use crate::nt::memory::{alloc_contiguous, free_contiguous, PAGE_SIZE};
+use crate::nt::memory::{AllocatedMemory, PAGE_SIZE};
 use core::mem::MaybeUninit;
 use nt::include::PVOID;
 use x86::msr::IA32_EFER;
@@ -18,23 +18,14 @@ pub struct MsrBitmap {
 }
 
 impl MsrBitmap {
-    pub fn new() -> Option<Self> {
+    pub fn new() -> Option<AllocatedMemory<Self>> {
         // The MSR permissions bitmap consists of four separate bit vectors of 16
         // Kbits (2 Kbytes) each. See: `15.11 - MSR Intercepts`.
         //
-        let memory = alloc_contiguous(PAGE_SIZE * 2);
-        if memory.is_none() {
-            log::warn!("Failed to allocate memory for MSR permission map");
-            return None;
-        }
-        log::trace!("Allocated memory for MSR permission map: {:x?}", memory);
-
-        Some(Self {
-            bitmap: memory? as PVOID,
-        })
+        AllocatedMemory::alloc_contiguous(PAGE_SIZE * 2)
     }
 
-    pub fn build(self) -> Self {
+    pub fn build(self: AllocatedMemory<Self>) -> AllocatedMemory<Self> {
         log::info!("Building msr permission bitmap");
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
@@ -47,7 +38,7 @@ impl MsrBitmap {
         unsafe {
             RtlInitializeBitMap(
                 bitmap_header_ptr as _,
-                self.bitmap as _,
+                self.ptr() as _,
                 (SVM_MSR_PERMISSIONS_MAP_SIZE * CHAR_BIT) as u32,
             )
         }
@@ -66,12 +57,5 @@ impl MsrBitmap {
         unsafe { RtlSetBits(bitmap_header_ptr as _, (offset + 1) as u32, 1) };
 
         self
-    }
-}
-
-impl Drop for MsrBitmap {
-    fn drop(&mut self) {
-        log::info!("Dropping msr permission bitmap");
-        free_contiguous(self.bitmap as _);
     }
 }

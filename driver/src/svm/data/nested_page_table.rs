@@ -1,6 +1,6 @@
 use crate::nt::addresses::aligned_physical_address;
 
-use crate::nt::memory::AlignedMemory;
+use crate::nt::memory::AllocatedMemory;
 use crate::svm::paging::LegacyPDE;
 use x86::bits64::paging::PDPTEntry;
 use x86::bits64::paging::{PDPTFlags, PML4Entry, PML4Flags};
@@ -13,13 +13,13 @@ pub struct NestedPageTable {
 }
 
 impl NestedPageTable {
-    pub fn new() -> Option<AlignedMemory<Self>> {
-        AlignedMemory::alloc(core::mem::size_of::<NestedPageTable>())
+    pub fn new() -> Option<AllocatedMemory<Self>> {
+        AllocatedMemory::alloc_aligned(core::mem::size_of::<NestedPageTable>())
     }
 
     pub unsafe fn build(
-        self: AlignedMemory<NestedPageTable>,
-    ) -> AlignedMemory<NestedPageTable> {
+        self: AllocatedMemory<NestedPageTable>,
+    ) -> AllocatedMemory<NestedPageTable> {
         log::info!("Building nested page tables");
 
         let pdp_base_pa = aligned_physical_address((*self.ptr()).pdp_entries.as_mut_ptr() as _);

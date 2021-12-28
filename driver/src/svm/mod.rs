@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::nt::include::Context;
-use crate::nt::memory::AlignedMemory;
+use crate::nt::memory::AllocatedMemory;
 use crate::nt::processor::{processor_count, ProcessorExecutor};
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
@@ -72,7 +72,7 @@ pub struct Processor {
     /// The index of the processor.
     index: u32,
 
-    processor_data: AlignedMemory<ProcessorData>,
+    processor_data: AllocatedMemory<ProcessorData>,
 }
 
 impl Processor {
@@ -147,13 +147,7 @@ impl Processor {
             //
             log::info!("Launching vm");
 
-            // TODO: Figure out why it's crashing after vmlaunch.
-            // Why?
-            // 1. The pointer is invalid.
-            // 2. The npt is not setup correctly.
-            // 3. ???
-
-            let host_rsp = unsafe { &(**self.processor_data).host_stack_layout.guest_vmcb_pa };
+            let host_rsp = unsafe { &(*self.processor_data.ptr()).host_stack_layout.guest_vmcb_pa };
             let host_rsp = host_rsp as *const u64 as u64;
             unsafe { launch_vm(host_rsp) };
 
