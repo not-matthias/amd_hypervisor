@@ -8,6 +8,7 @@
 #![feature(decl_macro)]
 
 use crate::svm::Processors;
+use core::mem::ManuallyDrop;
 use core::panic::PanicInfo;
 
 use crate::debug::dbg_break;
@@ -69,10 +70,11 @@ pub extern "system" fn DriverEntry(driver: PDRIVER_OBJECT, _path: PVOID) -> NTST
 
     // Virtualize processors
     //
-    let Some(mut processors) = Processors::new() else {
+    let Some(processors) = Processors::new() else {
         log::info!("Failed to create processors");
         return STATUS_UNSUCCESSFUL;
     };
+    let mut processors = ManuallyDrop::new(processors);
 
     if !processors.virtualize() {
         log::error!("Failed to virtualize processors");

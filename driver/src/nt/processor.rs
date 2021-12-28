@@ -23,58 +23,41 @@ fn processor_number_from_index(index: u32) -> Option<PROCESSOR_NUMBER> {
     }
 }
 
-/// Switches the execution of a process to another.
-fn switch_execution(
-    processor_number: PROCESSOR_NUMBER,
-    mut old_affinity: GROUP_AFFINITY,
-) -> GROUP_AFFINITY {
-    let mut affinity: GROUP_AFFINITY = unsafe { core::mem::zeroed() };
-
-    affinity.Group = processor_number.Group;
-    affinity.Mask = 1 << processor_number.Number;
-    affinity.Reserved[0] = 0;
-    affinity.Reserved[1] = 0;
-    affinity.Reserved[2] = 0;
-
-    unsafe { KeSetSystemGroupAffinityThread(&mut affinity, &mut old_affinity) };
-
-    affinity
+/// Switches execution to a specific processor until dropped.
+pub struct ProcessorExecutor {
+    old_affinity: MaybeUninit<GROUP_AFFINITY>,
 }
 
-/// Executes the specified function on a specific processor.
-pub fn execute_on_processor<F, D>(i: u32, f: &F, data: D) -> Option<()>
-where
-    F: Fn(D) -> Option<()>,
-{
-    if i > processor_count() {
-        return None;
+impl ProcessorExecutor {
+    pub fn switch_to_processor(i: u32) -> Option<Self> {
+        if i > processor_count() {
+            log::error!("Invalid processor index: {}", i);
+            return None;
+        }
+
+        let processor_number = processor_number_from_index(i)?;
+
+        let mut old_affinity = MaybeUninit::uninit();
+        let mut affinity: GROUP_AFFINITY = unsafe { core::mem::zeroed() };
+
+        affinity.Group = processor_number.Group;
+        affinity.Mask = 1 << processor_number.Number;
+        affinity.Reserved[0] = 0;
+        affinity.Reserved[1] = 0;
+        affinity.Reserved[2] = 0;
+
+        log::trace!("Switching execution to processor {}", i);
+        unsafe { KeSetSystemGroupAffinityThread(&mut affinity, old_affinity.as_mut_ptr()) };
+
+        Some(Self { old_affinity })
     }
-
-    let processor_number = processor_number_from_index(i)?;
-
-    // Switch execution of this code to a processor #i.
-    //
-    let mut old_affinity = switch_execution(processor_number, unsafe { core::mem::zeroed() });
-
-    // Execute the callback
-    //
-    let status = f(data);
-
-    // Revert the previously executed processor.
-    //
-    unsafe { KeRevertToUserGroupAffinityThread(&mut old_affinity) };
-
-    status
 }
 
-/// Executes the specified function on each processor.
-pub fn execute_on_each_processor<F, D>(f: F, data: &D) -> Option<()>
-where
-    F: Fn(&D) -> Option<()>,
-{
-    for i in 0..processor_count() {
-        execute_on_processor(i, &f, data)?;
+impl Drop for ProcessorExecutor {
+    fn drop(&mut self) {
+        log::info!("Switching execution back to previous processor");
+        unsafe {
+            KeRevertToUserGroupAffinityThread(self.old_affinity.as_mut_ptr());
+        }
     }
-
-    Some(())
 }

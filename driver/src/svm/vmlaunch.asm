@@ -25,8 +25,13 @@ guest_loop:
 
     // Start the guest execution via the VMRUN instruction.
     //
-    // See this for more information what the instruction does:
-    // - https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
+    // This instruction does the following:
+    // - Saves current state to the host state-save area defined in IA32_MSR_VM_HSAVE_PA.
+    // - Loads guest state from VMCB state-save area. (TODO: This is probably the error source)
+    // - Enables interrupts by setting the global interrupt flag (GIF)
+    // - Resumes execution of the guest until #VMEXIT occurs.
+    //
+    // For more information see: `15.5. VMRUN Instruction > 15.5.1 Basic Operation`.
     //
     vmrun rax               // switch to guest until #VMEXIT
 

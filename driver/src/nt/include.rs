@@ -17,8 +17,6 @@ use winapi::{
 extern "system" {
     pub static KdDebuggerNotPresent: *mut bool;
 
-    pub fn _sgdt(Descriptor: PVOID);
-
     pub fn ExAllocatePool(PoolType: POOL_TYPE, NumberOfBytes: SIZE_T) -> PVOID;
 
     pub fn ExFreePool(P: PVOID);
@@ -63,6 +61,8 @@ extern "system" {
     pub fn MmFreeContiguousMemory(BaseAddress: PVOID);
 
     pub fn KeBugCheck(BugCheckCode: u32);
+
+    pub fn KeGetCurrentIrql() -> KIRQL;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes

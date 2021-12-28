@@ -3,10 +3,12 @@ use crate::svm::data::shared_data::SharedData;
 use core::arch::asm;
 
 use crate::nt::addresses::physical_address;
+use crate::nt::include::Context;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
-use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2, NpEnable};
+use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
 use nt::include::PVOID;
+use x86::controlregs::cr3;
 use x86::msr::wrmsr;
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
@@ -69,7 +71,7 @@ impl ProcessorDataWrapper {
         ProcessorData::new().map(|data| ProcessorDataWrapper { data })
     }
 
-    pub fn prepare_for_virtualization(&mut self, shared_data: &SharedData) {
+    pub fn prepare_for_virtualization(&mut self, shared_data: &SharedData, context: Context) {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L982
 
         // Get physical addresses of important data structures
@@ -84,7 +86,9 @@ impl ProcessorDataWrapper {
 
         log::info!("Physical addresses:");
         log::info!("guest_vmcb_pa: {:x}", guest_vmcb_pa);
+        log::info!("guest_vmcb: {:x}", guest_vmcb_pa.as_u64());
         log::info!("host_vmcb_pa: {:x}", host_vmcb_pa);
+        log::info!("host_vmcb: {:x}", host_vmcb_pa.as_u64());
         log::info!("host_state_area_pa: {:x}", host_state_area_pa);
         log::info!("pml4_pa: {:x}", pml4_pa);
         log::info!("msr_pm_pa: {:x}", msr_pm_pa);
@@ -133,19 +137,20 @@ impl ProcessorDataWrapper {
         //
         log::info!("Configuring nested page tables");
         unsafe {
-            (*self.data)
-                .guest_vmcb
-                .control_area
-                .np_enable
-                .insert(NpEnable::NESTED_PAGING);
+            // (*self.data)
+            //     .guest_vmcb
+            //     .control_area
+            //     .np_enable
+            //     .insert(NpEnable::NESTED_PAGING);
 
-            (*self.data).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+            // (*self.data).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+            (*self.data).guest_vmcb.control_area.ncr3 = cr3();
         };
 
         // Setup guest state based on current system state.
         //
         log::info!("Configuring guest state save area");
-        unsafe { (*self.data).guest_vmcb.save_area.build() };
+        unsafe { (*self.data).guest_vmcb.save_area.build(context) };
 
         // Save some of the current state on VMCB.
         //
@@ -170,6 +175,7 @@ impl ProcessorDataWrapper {
         // Set the physical address for the `vmrun` instruction, which will save
         // the current host state.
         //
+
         log::info!("Setting the host state area in SVM_MSR_VM_HSAVE_PA");
         unsafe { wrmsr(SVM_MSR_VM_HSAVE_PA, host_state_area_pa.as_u64()) };
 

@@ -1,16 +1,13 @@
 extern crate alloc;
 
-use crate::nt::processor::{execute_on_processor, processor_count};
-use crate::support;
-
+use crate::nt::include::Context;
+use crate::nt::processor::{processor_count, ProcessorExecutor};
+use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorDataWrapper;
 use crate::svm::data::shared_data::SharedData;
-use alloc::vec::Vec;
-
-use crate::debug::dbg_break;
-use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
-use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::vmlaunch::launch_vm;
+use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
+use alloc::vec::Vec;
 use x86::cpuid::{CpuId, Hypervisor};
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -34,9 +31,14 @@ impl Processors {
             return None;
         }
 
+        let processors = (0..processor_count())
+            .filter_map(Processor::new)
+            .collect::<Vec<_>>();
+        log::info!("Found {} processors", processors.len());
+
         Some(Self {
             shard_data: SharedData::new()?,
-            processors: (0..processor_count()).filter_map(Processor::new).collect(),
+            processors,
         })
     }
 
@@ -80,56 +82,80 @@ impl Processor {
                 Hypervisor::Unknown(ebx, ecx, edx) => {
                     log::info!("Found unknown hypervisor: {:x} {:x} {:x}", ebx, ecx, edx);
 
+                    dbg_break!();
+
                     // TODO: Only allow our hypervisor
 
-                    true
+                    ebx == 0x42 && ecx == 0x42 && edx == 0x42
                 }
                 _ => false,
             })
             .unwrap_or_default()
     }
 
-    pub fn virtualize_processor(data: (&mut Processor, &SharedData)) -> Option<()> {
+    pub fn virtualize(&mut self, shared_data: &SharedData) -> bool {
+        let Some(executor) = ProcessorExecutor::switch_to_processor(self.index) else {
+            log::error!("Failed to switch to processor");
+            return false
+        };
+
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
 
-        let (processor, shared_data) = data;
+        // IMPORTANT: We have to capture the context right here, so that `launch_vm` continues the
+        // execution of the current process at this point of time. If we don't do this,
+        // weird things will happen since we will execute the guest at another point.
+        //
+        // This also makes sense why `vmsave` was crashing inside `prepare_for_virtualization`. It
+        // obviously entered the guest state and tried to execute from there on. And because of that,
+        // everything that happened afterwards is just undefined behaviour.
+        //
+        // Literally wasted like a whole day just because of this 1 line.
+        //
+        let context = Context::capture();
+
+        log::info!("After context has been captured");
+        dbg_break!();
 
         // Check if already virtualized.
         //
-        // if self.is_virtualized() {
-        //     log::info!("Processor {} is already virtualized", self.index);
-        //     return true;
-        // }
+        if !self.is_virtualized() {
+            // Attempt to virtualize the processor
+            //
 
-        // Attempt to virtualize the processor
-        //
+            // Enable SVM by setting EFER.SVME.
+            let msr = unsafe { rdmsr(IA32_EFER) } | EFER_SVME;
+            unsafe { wrmsr(IA32_EFER, msr) };
 
-        // Enable SVM by setting EFER.SVME.
-        let msr = unsafe { rdmsr(IA32_EFER) } | EFER_SVME;
-        unsafe { wrmsr(IA32_EFER, msr) };
+            // Setup vmcb
+            //
+            log::info!("Prepared vmcb for virtualization");
+            self.data.prepare_for_virtualization(shared_data, context);
 
-        // Setup vmcb
-        //
-        processor.data.prepare_for_virtualization(shared_data);
+            // Launch vm
+            // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
+            //
+            log::info!("Launching vm");
 
-        dbg_break!();
+            // TODO: Figure out why it's crashing after vmlaunch.
+            // Why?
+            // 1. The pointer is invalid.
+            // 2. The npt is not setup correctly.
+            // 3. ???
 
-        // Launch vm
-        // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
-        //
-        let host_rsp = unsafe { &(*processor.data.data).host_stack_layout.guest_vmcb_pa };
-        let host_rsp = host_rsp as *const u64 as u64;
-        unsafe { launch_vm(host_rsp) };
+            let host_rsp = unsafe { &(*self.data.data).host_stack_layout.guest_vmcb_pa };
+            let host_rsp = host_rsp as *const u64 as u64;
+            unsafe { launch_vm(host_rsp) };
 
-        log::info!("We should have never been here.");
-        dbg_break!();
-        unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
+            // We should never continue the guest execution here.
+            //
+            dbg_break!();
+            unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
+        }
 
-        Some(())
-    }
+        log::warn!("Processor {} is now virtualized", self.index);
 
-    pub fn virtualize(&mut self, shared_data: &SharedData) -> bool {
-        execute_on_processor(self.index, &Self::virtualize_processor, (self, shared_data));
+        core::mem::drop(executor);
+
         true
     }
 

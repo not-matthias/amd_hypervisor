@@ -2,6 +2,7 @@ use crate::nt::include::Context;
 
 use core::arch::asm;
 use x86::controlregs::{cr2, cr3};
+
 use x86::msr::{rdmsr, IA32_EFER, IA32_PAT};
 
 use crate::svm::data::segmentation::{SegmentAttribute, SegmentDescriptor};
@@ -99,6 +100,8 @@ pub struct SaveArea {
 impl SaveArea {
     // See: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L893
     fn segment_access_right(segment_selector: u16, gdt_base: u64) -> u16 {
+        // TODO: Check if segment is actually valid. Otherwise we'll read a completely invalid memory location.
+
         const RPL_MASK: u16 = 3;
         let descriptor = gdt_base + (segment_selector & !RPL_MASK) as u64;
 
@@ -127,8 +130,7 @@ impl SaveArea {
         limit
     }
 
-    // TODO: VALIDATED
-    pub fn build(&mut self) {
+    pub fn build(&mut self, context: Context) {
         // Like this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1053
 
         // Capture the current GDT and IDT to use as initial values of the guest
@@ -149,8 +151,6 @@ impl SaveArea {
 
         // Capture context
         //
-        let context = Context::capture();
-
         self.cs_limit = Self::segment_limit(context.seg_cs);
         self.ds_limit = Self::segment_limit(context.seg_ds);
         self.es_limit = Self::segment_limit(context.seg_es);
