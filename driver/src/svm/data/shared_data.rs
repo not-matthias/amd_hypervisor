@@ -1,9 +1,10 @@
+use crate::nt::memory::AlignedMemory;
 use crate::svm::data::msr_bitmap::MsrBitmap;
-use crate::svm::data::nested_page_table::NestedPageTableWrapper;
+use crate::svm::data::nested_page_table::NestedPageTable;
 
 pub struct SharedData {
     pub msr_permission_map: MsrBitmap,
-    pub npt: NestedPageTableWrapper,
+    pub npt: AlignedMemory<NestedPageTable>,
 }
 
 impl SharedData {
@@ -12,7 +13,7 @@ impl SharedData {
 
         Some(Self {
             msr_permission_map: MsrBitmap::new()?.build(),
-            npt: unsafe { NestedPageTableWrapper::new()?.build() },
+            npt: unsafe { NestedPageTable::new()?.build() },
         })
     }
 }

@@ -5,7 +5,7 @@ use crate::nt::include::{
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
 use core::ops::{Deref, DerefMut};
-use winapi::shared::ntdef::PVOID;
+
 use winapi::um::winnt::RtlZeroMemory;
 use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
 
@@ -70,6 +70,16 @@ impl<T> AlignedMemory<T> {
     /// Frees the underlying memory.
     pub fn free(self) {
         unsafe { ExFreePool(self.0 as _) };
+    }
+
+    /// Returns a pointer to the underlying memory.
+    ///
+    /// # Safety
+    /// This function is very unsafe because we essentially allow multiple mutable pointers.
+    ///
+    /// TODO: How to make it safer?
+    pub const fn ptr(&self) -> *mut T {
+        self.0
     }
 }
 

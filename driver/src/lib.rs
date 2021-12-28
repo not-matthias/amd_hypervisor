@@ -6,6 +6,7 @@
 #![feature(llvm_asm)]
 #![feature(untagged_unions)]
 #![feature(decl_macro)]
+#![feature(arbitrary_self_types)]
 
 use crate::svm::Processors;
 

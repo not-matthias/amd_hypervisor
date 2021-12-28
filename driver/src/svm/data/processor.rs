@@ -5,7 +5,7 @@ use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
 use crate::svm::data::shared_data::SharedData;
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
-use aligned::Aligned;
+
 use core::arch::asm;
 use core::ops::{Deref, DerefMut};
 use nt::include::PVOID;
@@ -77,7 +77,7 @@ impl ProcessorDataWrapper {
         let host_state_area_pa =
             physical_address(unsafe { (**self.data).host_state_area.as_ptr() as *const _ });
         let pml4_pa =
-            physical_address(unsafe { (**shared_data.npt.data).pml4_entries.as_ptr() as *const _ });
+            physical_address(unsafe { (**shared_data.npt).pml4_entries.as_ptr() as *const _ });
         let msr_pm_pa = physical_address(shared_data.msr_permission_map.bitmap as *const _);
 
         log::info!("Physical addresses:");

@@ -1,5 +1,4 @@
 use crate::nt::addresses::aligned_physical_address;
-use aligned::Aligned;
 
 use crate::nt::memory::AlignedMemory;
 use crate::svm::paging::LegacyPDE;
@@ -17,42 +16,31 @@ impl NestedPageTable {
     pub fn new() -> Option<AlignedMemory<Self>> {
         AlignedMemory::alloc(core::mem::size_of::<NestedPageTable>())
     }
-}
 
-pub struct NestedPageTableWrapper {
-    pub data: AlignedMemory<NestedPageTable>,
-}
-
-// TODO: Remove wrapper
-impl NestedPageTableWrapper {
-    pub fn new() -> Option<Self> {
-        Some(NestedPageTableWrapper {
-            data: NestedPageTable::new()?,
-        })
-    }
-
-    pub unsafe fn build(mut self) -> Self {
+    pub unsafe fn build(
+        mut self: AlignedMemory<NestedPageTable>,
+    ) -> AlignedMemory<NestedPageTable> {
         log::info!("Building nested page tables");
 
-        let pdp_base_pa = aligned_physical_address((**self.data).pdp_entries.as_mut_ptr() as _);
+        let pdp_base_pa = aligned_physical_address((**self).pdp_entries.as_mut_ptr() as _);
 
         let flags = PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]);
         let entry = PML4Entry::new(pdp_base_pa, flags);
-        (**self.data).pml4_entries[0] = entry;
+        (**self).pml4_entries[0] = entry;
 
         // One PML4 entry controls 512 page directory pointer entries.
         //
         for i in 0..512 {
             log::trace!("Setting pdp entry {}", i);
 
-            let pde_address = &mut (**self.data).pd_entries[i][0];
+            let pde_address = &mut (**self).pd_entries[i][0];
             let pde_address = pde_address as *mut LegacyPDE as *mut u64;
             let pde_base_pa = aligned_physical_address(pde_address);
 
             let flags = PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]);
             let entry = PDPTEntry::new(pde_base_pa, flags);
 
-            (**self.data).pdp_entries[i] = entry;
+            (**self).pdp_entries[i] = entry;
 
             for j in 0..512 {
                 let translation_pa = (i * 512) + j;
@@ -63,11 +51,11 @@ impl NestedPageTableWrapper {
                 //     PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::PS]),
                 // );
 
-                (**self.data).pd_entries[i][j].set_page_frame_number(translation_pa as u64);
-                (**self.data).pd_entries[i][j].set_valid(1);
-                (**self.data).pd_entries[i][j].set_write(1);
-                (**self.data).pd_entries[i][j].set_user(1);
-                (**self.data).pd_entries[i][j].set_large_page(1);
+                (**self).pd_entries[i][j].set_page_frame_number(translation_pa as u64);
+                (**self).pd_entries[i][j].set_valid(1);
+                (**self).pd_entries[i][j].set_write(1);
+                (**self).pd_entries[i][j].set_user(1);
+                (**self).pd_entries[i][j].set_large_page(1);
             }
         }
 
