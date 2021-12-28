@@ -2,13 +2,14 @@ use crate::nt::addresses::physical_address;
 use crate::nt::include::Context;
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
+
 use crate::svm::data::shared_data::SharedData;
 use crate::svm::paging::PAGE_SIZE;
-use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2};
+use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2, NpEnable};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
 use core::arch::asm;
 use nt::include::PVOID;
-use x86::controlregs::cr3;
+
 use x86::msr::wrmsr;
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
@@ -69,17 +70,17 @@ impl ProcessorData {
         let host_state_area_pa =
             physical_address(unsafe { (*self.ptr()).host_state_area.as_ptr() as *const _ });
         let pml4_pa =
-            physical_address(unsafe { (*shared_data.npt.ptr()).pml4_entries.as_ptr() as *const _ });
+            physical_address(unsafe { (*shared_data.npt.ptr()).pml4.as_ptr() as *const _ as _ });
         let msr_pm_pa = physical_address(shared_data.msr_permission_map.ptr() as *const _);
 
-        log::info!("Physical addresses:");
-        log::info!("guest_vmcb_pa: {:x}", guest_vmcb_pa);
-        log::info!("guest_vmcb: {:x}", guest_vmcb_pa.as_u64());
-        log::info!("host_vmcb_pa: {:x}", host_vmcb_pa);
-        log::info!("host_vmcb: {:x}", host_vmcb_pa.as_u64());
-        log::info!("host_state_area_pa: {:x}", host_state_area_pa);
-        log::info!("pml4_pa: {:x}", pml4_pa);
-        log::info!("msr_pm_pa: {:x}", msr_pm_pa);
+        log::trace!("Physical addresses:");
+        log::trace!("guest_vmcb_pa: {:x}", guest_vmcb_pa);
+        log::trace!("guest_vmcb: {:x}", guest_vmcb_pa.as_u64());
+        log::trace!("host_vmcb_pa: {:x}", host_vmcb_pa);
+        log::trace!("host_vmcb: {:x}", host_vmcb_pa.as_u64());
+        log::trace!("host_state_area_pa: {:x}", host_state_area_pa);
+        log::trace!("pml4_pa: {:x}", pml4_pa);
+        log::trace!("msr_pm_pa: {:x}", msr_pm_pa);
 
         // Configure which instructions to intercept
         //
@@ -125,14 +126,18 @@ impl ProcessorData {
         //
         log::info!("Configuring nested page tables");
         unsafe {
-            // (*self.ptr())
-            //     .guest_vmcb
-            //     .control_area
-            //     .np_enable
-            //     .insert(NpEnable::NESTED_PAGING);
-            // (*self.ptr()).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+            (*self.ptr())
+                .guest_vmcb
+                .control_area
+                .np_enable
+                .insert(NpEnable::NESTED_PAGING);
 
-            (*self.ptr()).guest_vmcb.control_area.ncr3 = cr3();
+            (*self.ptr()).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+            log::info!("Pml4 pa: {:x}", pml4_pa.as_u64());
+
+            // If we don't want to use NPT:
+            //
+            // (*self.ptr()).guest_vmcb.control_area.ncr3 = cr3();
         };
 
         // Setup guest state based on current system state.

@@ -4,6 +4,11 @@ pub const PAGE_SHIFT: u64 = 12;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 
+/// Converts a page address to a page frame number.
+pub macro page_to_pfn($page: expr) {
+    ($page >> crate::svm::paging::PAGE_SHIFT) as u64
+}
+
 /// Aligns the specified virtual address to a page.
 ///
 /// # Example
@@ -17,6 +22,8 @@ pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub macro page_align($virtual_address:expr) {
     ($virtual_address + crate::svm::paging::PAGE_SIZE - 1) & crate::svm::paging::PAGE_MASK
 }
+
+pub type LegacyPDPTE = LegacyPML4E;
 
 bitfield! {
     /// See Figure 5-25. (2-Mbyte PDE—Long Mode)

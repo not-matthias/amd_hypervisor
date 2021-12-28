@@ -4,7 +4,7 @@ use x86::bits64::paging::PAddr;
 pub fn physical_address(ptr: *const u64) -> PAddr {
     let physical_address = unsafe { *MmGetPhysicalAddress(ptr as _).QuadPart() } as u64;
 
-    log::trace!("physical address: {:x}", physical_address);
+    log::trace!("physical_address({:p}) = {:x}", ptr, physical_address);
 
     PAddr::from(physical_address)
 }

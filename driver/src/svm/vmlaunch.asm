@@ -33,6 +33,10 @@ guest_loop:
     //
     // For more information see: `15.5. VMRUN Instruction > 15.5.1 Basic Operation`.
     //
+    // There's a few assumptions here:
+    // - rax must be a 4-Kbyte aligned address.
+    // - `VM_HSAVE_PA MSR` must be set so that the host processor state information can be saved.
+    //
     vmrun rax               // switch to guest until #VMEXIT
 
     // When we get here, an #VMEXIT occurred. Some of the guest state has

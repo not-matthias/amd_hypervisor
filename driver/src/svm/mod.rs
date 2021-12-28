@@ -12,7 +12,7 @@ use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
 
 use crate::support::is_virtualized;
 use alloc::vec::Vec;
-use x86::cpuid::{cpuid};
+use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod data;
