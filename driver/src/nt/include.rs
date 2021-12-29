@@ -3,7 +3,11 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
+use bitflags::bitflags;
 use core::mem::MaybeUninit;
+use nt::include::HANDLE;
+use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
+use winapi::shared::ntdef::PHANDLE;
 use winapi::shared::ntdef::PVOID;
 use winapi::{
     km::wdm::{KIRQL, KPROCESSOR_MODE, POOL_TYPE},
@@ -13,6 +17,9 @@ use winapi::{
     },
     um::winnt::PCONTEXT,
 };
+
+/// `VOID KSTART_ROUTINE (_In_ PVOID StartContext);`
+pub type KSTART_ROUTINE = extern "system" fn(*mut u64);
 
 extern "system" {
     pub static KdDebuggerNotPresent: *mut bool;
@@ -65,6 +72,16 @@ extern "system" {
     pub fn KeGetCurrentIrql() -> KIRQL;
 
     pub fn ZwYieldExecution() -> NTSTATUS;
+
+    pub fn PsCreateSystemThread(
+        ThreadHandle: PHANDLE,
+        DesiredAccess: u32,
+        ObjectAttributes: *mut OBJECT_ATTRIBUTES,
+        ProcessHandle: HANDLE,
+        ClientId: *mut u64,
+        StartRoutine: *const (), // *const KSTART_ROUTINE
+        StartContext: *mut u64,
+    ) -> NTSTATUS;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes

@@ -76,6 +76,7 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
     // Prevent IA32_EFER from being modified
     //
     if msr == IA32_EFER {
+        #[cfg(not(feature = "no-assertions"))]
         assert!(write_access);
 
         let low_part = unsafe { (*guest_context.guest_regs).rax as u32 };
@@ -142,6 +143,7 @@ unsafe extern "stdcall" fn handle_vmexit(
     //
     asm!("vmload rax", in("rax") (*data).host_stack_layout.host_vmcb_pa);
 
+    #[cfg(not(feature = "no-assertions"))]
     assert_eq!((*data).host_stack_layout.reserved_1, u64::MAX);
 
     // Guest's RAX is overwritten by the host's value on #VMEXIT and saved in
