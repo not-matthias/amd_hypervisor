@@ -1,10 +1,9 @@
 use crate::debug::dbg_break;
 use crate::nt::addresses::physical_address;
-use crate::nt::include::{KeBugCheck, KeGetCurrentIrql, MANUALLY_INITIATED_CRASH};
+use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::svm::data::guest::{GuestContext, GuestRegisters};
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
-
 use crate::svm::events::EventInjection;
 use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
@@ -67,10 +66,6 @@ pub fn handle_cpuid(_data: *mut ProcessorData, guest_context: &mut GuestContext)
         (*guest_context.guest_regs).rbx = cpuid.ebx as u64;
         (*guest_context.guest_regs).rcx = cpuid.ecx as u64;
         (*guest_context.guest_regs).rdx = cpuid.edx as u64;
-    }
-
-    if unsafe { KeGetCurrentIrql() } <= 2 {
-        log::info!("Cpuid({:x}, {:x}) = {:x?}", leaf, subleaf, cpuid);
     }
 }
 
