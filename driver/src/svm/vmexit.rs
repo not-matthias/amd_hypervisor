@@ -132,6 +132,26 @@ pub fn handle_vmrun(data: *mut ProcessorData, _: &mut GuestContext) {
     EventInjection::gp().inject(data);
 }
 
+pub fn handle_break_point_exception(data: *mut ProcessorData, _guest_context: &mut GuestContext) {
+    // TODO:
+    // - Find hook entry for the address (current rip)
+    // - Set rip to the hook handler otherwise inject #BP
+
+    EventInjection::bp().inject(data);
+}
+
+pub fn handle_nested_page_fault(_data: *mut ProcessorData, _guest_context: &mut GuestContext) {
+    // TODO:
+    // - Weird exitINfo.Fields.Valid check? -> Builds sub tables again
+    // - Transition to npt state:
+    //     - Original -> Hooked or vice versa
+    // If hook entry exists:
+    //   - Either transition to the original page
+    //   - Or go jmp to another hooked page
+    // If no hook entry exists:
+    //   - Currently running a page with hooks but jumping to valid page
+}
+
 #[no_mangle]
 unsafe extern "stdcall" fn handle_vmexit(
     data: *mut ProcessorData,
@@ -167,6 +187,12 @@ unsafe extern "stdcall" fn handle_vmexit(
         }
         VmExitCode::VMEXIT_VMRUN => {
             handle_vmrun(data, &mut guest_context);
+        }
+        VmExitCode::VMEXIT_EXCEPTION_BP => {
+            handle_break_point_exception(data, &mut guest_context);
+        }
+        VmExitCode::VMEXIT_NPF => {
+            handle_nested_page_fault(data, &mut guest_context);
         }
         _ => {
             // Invalid #VMEXIT. This should never happen.

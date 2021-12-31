@@ -10,11 +10,10 @@
 #![feature(const_mut_refs)]
 
 use crate::debug::dbg_break;
-use crate::nt::include::{KeBugCheck, PsCreateSystemThread, MANUALLY_INITIATED_CRASH};
+
+use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::svm::Processors;
-use core::mem::MaybeUninit;
 use core::panic::PanicInfo;
-use km_alloc::KernelAlloc;
 use log::{KernelLogger, LevelFilter};
 use winapi::km::wdm::DRIVER_OBJECT;
 use winapi::shared::{
@@ -23,6 +22,7 @@ use winapi::shared::{
 };
 
 pub mod debug;
+pub mod hook;
 pub mod nt;
 pub mod support;
 pub mod svm;
@@ -45,7 +45,7 @@ extern "C" fn eh_personality() {}
 extern "C" fn __CxxFrameHandler3() {}
 
 #[global_allocator]
-static GLOBAL: KernelAlloc = KernelAlloc;
+static GLOBAL: km_alloc::KernelAlloc = km_alloc::KernelAlloc;
 
 static LOGGER: KernelLogger = KernelLogger;
 
@@ -75,6 +75,8 @@ fn virtualize_system() -> Option<()> {
     // Save the processors for later use
     //
     unsafe { PROCESSORS = Some(processors) };
+
+    // TODO: Initialize hook here
 
     Some(())
 }

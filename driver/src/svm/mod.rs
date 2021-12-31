@@ -123,6 +123,10 @@ impl Processor {
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
 
+        // Build hook data
+        //
+        // TODO: InitializeHookData, builds npt
+
         // IMPORTANT: We have to capture the context right here, so that `launch_vm` continues the
         // execution of the current process at this point of time. If we don't do this,
         // weird things will happen since we will execute the guest at another point.

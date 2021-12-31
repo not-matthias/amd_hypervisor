@@ -82,6 +82,17 @@ impl ProcessorData {
         log::trace!("pml4_pa: {:x}", pml4_pa);
         log::trace!("msr_pm_pa: {:x}", msr_pm_pa);
 
+        // TODO: Will the C3 be visible for the hooked functions? Can we not hook any ntoskrnl fn?
+
+        // Intercept breakpoint exceptions. This is required for the npt hooks because
+        // we need to redirect the execution to our hook handlers. The breakpoint will be
+        // placed on the original instruction.
+        //
+        unsafe {
+            (*self.ptr()).guest_vmcb.control_area.intercept_exception |= 1 << 3;
+            // TODO: Create bitflags for this
+        }
+
         // Configure which instructions to intercept
         //
         log::info!("Configuring instructions to intercept");
