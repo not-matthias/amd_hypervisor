@@ -3,7 +3,7 @@ target = "x86_64-pc-windows-msvc"
 
 rustflags = [
     #"-C", "link-arg=-fuse-ld=lld",
-    "-C", "panic=abort",
+    #"-C", "panic=abort",
 
     # Pre Link Args
     "-Z", "pre-link-arg=/NOLOGO",
@@ -13,7 +13,7 @@ rustflags = [
     "-Z", "pre-link-arg=/DRIVER",
     "-Z", "pre-link-arg=/DYNAMICBASE",
     "-Z", "pre-link-arg=/MANIFEST:NO",
-    # "-Z", "pre-link-arg=/PDBALTPATH:none",
+#     "-Z", "pre-link-arg=/PDBALTPATH:none",
 
     # Post Link Args
     "-C", "link-arg=/OPT:REF,ICF",
@@ -22,3 +22,30 @@ rustflags = [
     "-C", "link-arg=/MERGE:.rustc=.data",
     "-C", "link-arg=/INTEGRITYCHECK"
 ]
+
+# Tests are currently not possible because there's no way to
+# specify different RUSTFLAGS per profile. However, it is currently
+# in development: https://github.com/rust-lang/cargo/issues/7878
+#
+# The following rustflags work for tests:
+#rustflags = [
+#    #"-C", "link-arg=-fuse-ld=lld",
+#    #"-C", "panic=abort",
+#
+#    # Pre Link Args
+#    "-Z", "pre-link-arg=/NOLOGO",
+#    "-Z", "pre-link-arg=/NXCOMPAT",
+#    #    "-Z", "pre-link-arg=/NODEFAULTLIB",
+#    #    "-Z", "pre-link-arg=/SUBSYSTEM:NATIVE",
+#    "-Z", "pre-link-arg=/DRIVER",
+#    "-Z", "pre-link-arg=/DYNAMICBASE",
+#    "-Z", "pre-link-arg=/MANIFEST:NO",
+#    #     "-Z", "pre-link-arg=/PDBALTPATH:none",
+#
+#    # Post Link Args
+#    "-C", "link-arg=/OPT:REF,ICF",
+#    #    "-C", "link-arg=/ENTRY:DriverEntry",
+#    "-C", "link-arg=/MERGE:.edata=.rdata",
+#    "-C", "link-arg=/MERGE:.rustc=.data",
+#    #    "-C", "link-arg=/INTEGRITYCHECK"
+#]
