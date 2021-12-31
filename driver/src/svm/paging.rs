@@ -1,5 +1,6 @@
 use x86::bits64::paging::MAXPHYADDR;
 
+// TODO: Replaec with BASE_PAGE_SIZE
 pub const PAGE_SHIFT: u64 = 12;
 pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
@@ -8,6 +9,13 @@ pub const PFN_MASK: u64 = ((1 << MAXPHYADDR) - 1) & !0xfff;
 /// Converts a page address to a page frame number.
 pub macro page_to_pfn($page: expr) {
     ($page >> crate::svm::paging::PAGE_SHIFT) as u64
+}
+
+/// Calculates how many pages are required to hold the specified number of bytes.
+pub macro bytes_to_pages($bytes: expr) {
+    // ((($bytes) >> crate::svm::paging::PAGE_SHIFT) + ((($bytes) & (crate::svm::paging::PAGE_SIZE - 1)) != 0))
+
+    ($bytes >> crate::svm::paging::PAGE_SHIFT) as usize
 }
 
 /// Aligns the specified virtual address to a page.
