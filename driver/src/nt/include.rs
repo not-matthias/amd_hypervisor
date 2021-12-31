@@ -3,20 +3,23 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
-use bitflags::bitflags;
+use crate::svm::paging::{bytes_to_pages};
 use core::mem::MaybeUninit;
 use nt::include::HANDLE;
+use winapi::shared::ntdef::LARGE_INTEGER;
 use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
 use winapi::shared::ntdef::PHANDLE;
+use winapi::shared::ntdef::PHYSICAL_ADDRESS;
 use winapi::shared::ntdef::PVOID;
 use winapi::{
     km::wdm::{KIRQL, KPROCESSOR_MODE, POOL_TYPE},
     shared::{
         basetsd::SIZE_T,
-        ntdef::{NTSTATUS, PGROUP_AFFINITY, PHYSICAL_ADDRESS, PPROCESSOR_NUMBER},
+        ntdef::{NTSTATUS, PGROUP_AFFINITY, PPROCESSOR_NUMBER},
     },
     um::winnt::PCONTEXT,
 };
+use x86::bits64::paging::BASE_PAGE_SHIFT;
 
 /// `VOID KSTART_ROUTINE (_In_ PVOID StartContext);`
 pub type KSTART_ROUTINE = extern "system" fn(*mut u64);
@@ -82,6 +85,8 @@ extern "system" {
         StartRoutine: *const (), // *const KSTART_ROUTINE
         StartContext: *mut u64,
     ) -> NTSTATUS;
+
+    pub fn MmGetPhysicalMemoryRanges() -> *mut PhysicalMemoryRange;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes
@@ -89,6 +94,22 @@ pub const MANUALLY_INITIATED_CRASH: u32 = 0x000000E2;
 
 pub const MM_ANY_NODE_OK: u32 = 0x80000000;
 pub type NODE_REQUIREMENT = u32;
+
+#[repr(C)]
+pub struct PhysicalMemoryRange {
+    pub base_address: PHYSICAL_ADDRESS,
+    pub number_of_bytes: LARGE_INTEGER,
+}
+
+impl PhysicalMemoryRange {
+    pub fn base_page(&self) -> u64 {
+        (unsafe { self.base_address.QuadPart() } >> BASE_PAGE_SHIFT) as u64
+    }
+
+    pub fn page_count(&self) -> u64 {
+        bytes_to_pages!(unsafe { self.number_of_bytes.QuadPart() }) as u64
+    }
+}
 
 #[repr(C)]
 pub struct RTL_BITMAP {
