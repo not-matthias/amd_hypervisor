@@ -16,7 +16,7 @@ pub const KERNEL_STACK_SIZE: usize = 0x6000;
 pub const STACK_CONTENTS_SIZE: usize =
     KERNEL_STACK_SIZE - (core::mem::size_of::<PVOID>() * 6) - core::mem::size_of::<KTRAP_FRAME>();
 
-#[repr(C)]
+#[repr(C, align(4096))]
 pub struct HostStackLayout {
     pub stack_contents: [u8; STACK_CONTENTS_SIZE],
     pub trap_frame: KTRAP_FRAME,
@@ -26,7 +26,7 @@ pub struct HostStackLayout {
     pub host_vmcb_pa: u64,
 
     pub self_data: *mut ProcessorData,
-    pub shared_data: *const SharedData,
+    pub shared_data: *mut SharedData,
 
     /// To keep HostRsp 16 bytes aligned
     pub padding_1: u64,
@@ -49,6 +49,10 @@ pub struct ProcessorData {
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub host_state_area: [u8; PAGE_SIZE],
+
+    // TODO: Why does this work, but inside stack layout not?
+    pub marker: u64,
+    pub shared_data: *mut SharedData,
 }
 
 impl ProcessorData {
@@ -82,16 +86,14 @@ impl ProcessorData {
         log::trace!("pml4_pa: {:x}", pml4_pa);
         log::trace!("msr_pm_pa: {:x}", msr_pm_pa);
 
-        // TODO: Will the C3 be visible for the hooked functions? Can we not hook any ntoskrnl fn?
-
         // Intercept breakpoint exceptions. This is required for the npt hooks because
         // we need to redirect the execution to our hook handlers. The breakpoint will be
         // placed on the original instruction.
         //
-        unsafe {
-            (*self.ptr()).guest_vmcb.control_area.intercept_exception |= 1 << 3;
-            // TODO: Create bitflags for this
-        }
+        // unsafe {
+        //     (*self.ptr()).guest_vmcb.control_area.intercept_exception |= 1 << 3;
+        //     // TODO: Create bitflags for this
+        // }
 
         // Configure which instructions to intercept
         //
@@ -180,8 +182,11 @@ impl ProcessorData {
         //
         log::info!("Setting up the stack layout");
         unsafe {
+            (*self.ptr()).marker = 0x424242;
+            (*self.ptr()).shared_data = shared_data as *mut _;
+
             (*self.ptr()).host_stack_layout.reserved_1 = u64::MAX;
-            (*self.ptr()).host_stack_layout.shared_data = shared_data as *const _;
+            (*self.ptr()).host_stack_layout.shared_data = shared_data as *mut _;
             (*self.ptr()).host_stack_layout.self_data = self.ptr() as _;
             (*self.ptr()).host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
             (*self.ptr()).host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();

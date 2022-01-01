@@ -34,6 +34,8 @@ static _fltused: i32 = 0;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo<'_>) -> ! {
+    dbg_break!();
+
     unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
 
     loop {}
@@ -136,3 +138,7 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
         }
     }
 }
+
+#[cfg(feature = "stub")]
+#[no_mangle]
+pub extern "system" fn _DllMainCRTStartup() {}

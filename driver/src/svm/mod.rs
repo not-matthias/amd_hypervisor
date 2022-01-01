@@ -23,7 +23,7 @@ pub mod vmexit;
 pub mod vmlaunch;
 
 pub struct Processors {
-    shard_data: SharedData,
+    shared_data: SharedData,
     processors: Vec<Processor>,
 }
 
@@ -41,7 +41,7 @@ impl Processors {
         log::info!("Found {} processors", processors.len());
 
         Some(Self {
-            shard_data: SharedData::new()?,
+            shared_data: SharedData::new()?,
             processors,
         })
     }
@@ -60,7 +60,7 @@ impl Processors {
                 break;
             };
 
-            if !processor.virtualize(&mut self.shard_data) {
+            if !processor.virtualize(&mut self.shared_data) {
                 log::error!("Failed to virtualize processor {}", processor.id());
 
                 status = false;
@@ -159,9 +159,9 @@ impl Processor {
             //
             log::info!("Launching vm");
 
-            let host_rsp = unsafe { &(*self.processor_data.ptr()).host_stack_layout.guest_vmcb_pa };
-            let host_rsp = host_rsp as *const u64 as u64;
-            unsafe { launch_vm(host_rsp) };
+            let host_rsp =
+                unsafe { &mut (*self.processor_data.ptr()).host_stack_layout.guest_vmcb_pa };
+            unsafe { launch_vm(host_rsp as *mut u64) };
 
             // We should never continue the guest execution here.
             //

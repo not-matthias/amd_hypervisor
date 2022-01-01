@@ -13,7 +13,7 @@ const VMCB_RESERVED_SIZE: usize =
 ///
 /// The VMCB is divided into two areas—the first one contains various control bits including the
 /// intercept vectors and the second one contains saved guest state.
-#[repr(C)]
+#[repr(C, align(4096))]
 pub struct Vmcb {
     /// Describes the layout of the control area of the VMCB, which starts at offset zero within the
     /// VMCB page. The control area is padded to a size of 1024 bytes. All unused bytes must be zero, as they
