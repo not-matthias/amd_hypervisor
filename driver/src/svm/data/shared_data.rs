@@ -13,7 +13,7 @@ impl SharedData {
 
         Some(Self {
             msr_permission_map: MsrBitmap::new()?.build(),
-            npt: unsafe { NestedPageTable::new()?.build() },
+            npt: NestedPageTable::identity()?,
         })
     }
 }

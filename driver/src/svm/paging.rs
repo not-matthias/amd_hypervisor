@@ -6,6 +6,24 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const PFN_MASK: u64 = ((1 << MAXPHYADDR) - 1) & !0xfff;
 
+pub macro va_from_pfn($pfn: expr) {{
+    use crate::nt::include::MmGetVirtualForPhysical;
+    use crate::svm::paging::PAGE_SHIFT;
+    use winapi::shared::ntdef::PHYSICAL_ADDRESS;
+
+    let physical_address = ($pfn << PAGE_SHIFT) as i64;
+
+    let mut pa: PHYSICAL_ADDRESS = unsafe { core::mem::zeroed() };
+    unsafe { *(pa.QuadPart_mut()) = physical_address };
+
+    unsafe { MmGetVirtualForPhysical(pa) }
+}}
+
+// TODO: Return pfn or physical address that has been shifted?
+pub macro pfn_from_pa($pa: expr) {
+    ($pa >> PAGE_SHIFT) & PFN_MASK
+}
+
 /// Converts a page address to a page frame number.
 pub macro page_to_pfn($page: expr) {
     ($page >> crate::svm::paging::PAGE_SHIFT) as u64
