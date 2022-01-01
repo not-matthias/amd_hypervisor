@@ -3,7 +3,7 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
-use crate::svm::paging::{bytes_to_pages};
+use crate::svm::paging::bytes_to_pages;
 use core::mem::MaybeUninit;
 use nt::include::HANDLE;
 use winapi::shared::ntdef::LARGE_INTEGER;
@@ -87,6 +87,8 @@ extern "system" {
     ) -> NTSTATUS;
 
     pub fn MmGetPhysicalMemoryRanges() -> *mut PhysicalMemoryRange;
+
+    pub fn MmGetVirtualForPhysical(PhysicalAddress: PHYSICAL_ADDRESS) -> u64;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes

@@ -2,6 +2,7 @@
 #[allow(dead_code)]
 extern crate alloc;
 
+use crate::PhysicalMemoryDescriptor;
 use alloc::vec::Vec;
 use nt::kernel::get_system_routine_address;
 use x86::current::paging::PML4;
@@ -77,7 +78,7 @@ impl HookData {
 // ============================================================================
 
 pub struct Hook {
-    physmem_descriptor: PhysmemDescriptor,
+    // physmem_descriptor: PhysicalMemoryDescriptor<'_>,
 }
 
 impl Hook {
@@ -85,7 +86,7 @@ impl Hook {
         // TODO: InitializeHookRegistrationEntries
 
         Some(Self {
-            physmem_descriptor: PhysmemDescriptor::new()?,
+            // physmem_descriptor: PhysmemDescriptor::new()?,
         })
     }
 

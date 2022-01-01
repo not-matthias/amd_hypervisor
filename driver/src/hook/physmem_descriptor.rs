@@ -2,16 +2,30 @@ use crate::nt::include::{MmGetPhysicalMemoryRanges, PhysicalMemoryRange};
 use crate::svm::paging::bytes_to_pages;
 use core::fmt::{Debug, Formatter};
 
+///
+///
+/// You can use `RAMMap` to verify and see the physical memory ranges of your system: https://codemachine.com/articles/physical_memory_ranges_in_kernel_debugger.html
+///
+/// ## What is this and why are there multiple physical memory ranges?
+///
+/// This is due to different memory mappings. You can't change them because they are hardware mappings,
+/// which leaves holes in the physical memory address space.
+///
+/// For more information, see the OSDev wiki: https://wiki.osdev.org/Memory_Map_(x86)
+///
+/// Thanks for @PDBDream
+///
 pub struct PhysicalMemoryDescriptor<'a> {
-    number_of_runs: usize,
-    number_of_pages: usize,
+    pub number_of_runs: usize,
+    pub number_of_pages: usize,
 
     // TODO: SimpleSvmHook stores the base_page and page_count instead of PhysicalMemoryRange
-    ranges: &'a [PhysicalMemoryRange],
+    pub ranges: &'a [PhysicalMemoryRange],
 }
 
 impl<'a> PhysicalMemoryDescriptor<'a> {
     pub fn new() -> Option<Self> {
+        // See: https://doxygen.reactos.org/d1/d6d/dynamic_8c_source.html#l00073
         let memory_range = unsafe { MmGetPhysicalMemoryRanges() };
         if memory_range.is_null() {
             log::error!("MmGetPhysicalMemoryRanges() returned null");
@@ -68,8 +82,8 @@ impl Debug for PhysicalMemoryDescriptor<'_> {
             let number_of_bytes = unsafe { (*range).number_of_bytes.QuadPart() };
 
             f.write_fmt(format_args!(
-                "  base_address = {:#x}, number_of_bytes: {:#x}",
-                base_address, number_of_bytes
+                "  base_address = {:#x}, number_of_bytes: {:#x}, base_page: {:#x}, page_count: {:#x}\n",
+                base_address, number_of_bytes, range.base_page(), range.page_count()
             ))?;
         }
 

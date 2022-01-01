@@ -11,6 +11,7 @@
 
 use crate::debug::dbg_break;
 
+use crate::hook::physmem_descriptor::PhysicalMemoryDescriptor;
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::svm::Processors;
 use core::panic::PanicInfo;
@@ -94,6 +95,8 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
     log::info!("Hello from amd_hypervisor!");
 
     dbg_break!();
+
+    log::info!("{:?}", PhysicalMemoryDescriptor::new());
 
     // Register `driver_unload` so we can devirtualize the processor later
     //
