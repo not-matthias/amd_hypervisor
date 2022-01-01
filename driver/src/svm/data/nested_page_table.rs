@@ -67,6 +67,7 @@ impl NestedPageTable {
         // PDPT
         //
         for (i, pdp) in unsafe { (**npt).pdp_entries }.iter_mut().enumerate() {
+            // for (i, pdp) in unsafe { (**npt).pdp_entries.iter_mut().enumerate() } {
             let pa = physical_address(unsafe { (**npt).pd_entries[i].as_ptr() as _ });
             *pdp = PDPTEntry::new(
                 pa,
