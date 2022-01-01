@@ -9,6 +9,13 @@ use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
+use x86_64::structures::idt::ExceptionVector::Page;
+
+// TODO: Use this as return value
+pub enum ExitType {
+    ExitHypervisor,
+    IncrementRIP,
+}
 
 pub const CPUID_DEVIRTUALIZE: u64 = 0x41414141;
 
@@ -142,14 +149,43 @@ pub fn handle_break_point_exception(data: *mut ProcessorData, _guest_context: &m
 
 pub fn handle_nested_page_fault(_data: *mut ProcessorData, _guest_context: &mut GuestContext) {
     // TODO:
-    // - Weird exitINfo.Fields.Valid check? -> Builds sub tables again
-    // - Transition to npt state:
-    //     - Original -> Hooked or vice versa
-    // If hook entry exists:
-    //   - Either transition to the original page
-    //   - Or go jmp to another hooked page
-    // If no hook entry exists:
-    //   - Currently running a page with hooks but jumping to valid page
+    // - Make sure there's no way to scan physical memory to find the hook
+    //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
+
+    // // Not yet mapped. It's MMIO access.
+    // if (!exit_info.valid) {
+    //     map_4k(guest_pa, guest_pa, rwx);
+    // }
+
+    // Apply or revert hooks
+    //
+    //
+    // let hide_hook = || {
+    //     map_all(rwx);
+    //     map_4k(guest_pa, guest_pa, rw); // revert the hook
+    //     // some additional stuff. TODO: check if needed.
+    // };
+    // let show_hook = || {
+    //     map_all(rw);
+    //     map_4k(guest_pa, hook.pa, rwx);  // apply hook
+    // };
+
+    // if there's a hook for this address
+    //
+    // if let Some(hook) = find_hook(rip?) {
+    //     if let Some(hook) = active_hook() {
+    //         // Hooked page jumped to hooked page
+    //         // TODO: This could be optimized, but it shouldn't be used often.
+    //         hide_hook();
+    //         show_hook();
+    //     } else {
+    //         // Legit page jumped to hooked page
+    //         show_hook();
+    //     }
+    // } else {
+    //     // Hooked page jumped outside. Hide hook.
+    //     hide_hook();
+    // }
 }
 
 #[no_mangle]

@@ -23,6 +23,8 @@ pub struct NestedPageTable {
 impl NestedPageTable {
     /// Creates the 2MB identity page table. Maps every guest physical address to the same host
     /// physical address.
+    /// This means physical address 0x4000 in the guest will point to the physical memory 0x4000 in the host.
+    ///
     ///
     /// # How it works
     ///
@@ -31,10 +33,12 @@ impl NestedPageTable {
     /// - Iterating is faster since we remove 1 iteration.
     ///
     /// Pros:
+    /// - Easier to implement.
+    /// - Faster to iterate (3 levels instead of 4).
     ///
     /// Cons:
-    /// - Size overhead because we don't need 512GB of physical memory.
-    ///
+    /// - We probably don't need access to 512 GB of physical memory.
+    /// - Hooking 2MB pages is inconvenient, because we would get tons of ept violations.
     ///
     /// # Other implementations
     ///
@@ -90,7 +94,10 @@ impl NestedPageTable {
     }
 
     /// Builds the nested page table to cover for the entire physical memory address space.
-    pub fn new_physmem(desc: PhysicalMemoryDescriptor) -> Option<()> {
+    ///
+    ///
+    pub fn system() -> Option<()> {
+        let desc = PhysicalMemoryDescriptor::new()?;
         let npt = AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
 
         // NPT entries based on the physical memory ranges.
@@ -187,4 +194,16 @@ impl NestedPageTable {
         // Entry->Fields.User = TRUE;
         // Entry->Fields.PageFrameNumber = pageFrameNumber;
     }
+
+    fn map_2b(host_pa: u64, guest_va: u64) {}
+
+    // TODO:
+    // - Implement system()
+    // - Split 2mb into 4kb pages
+    // - Map 4kb guest physical address to 4kb host physical address (hooked) and vice versa
+    // - Change permissions of other pages to RW and vice versa
+    //    - Are there optimizations? Only borders/outside memory?
+
+    // IMPORTANT: Can we cache it somehow?
+    // TODO: Can we unroll the loop somehow? Probably quite big for 512 * 512 (262144 = 0x40000) -> Takes probably stil quite a long time
 }

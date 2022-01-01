@@ -11,8 +11,8 @@
 
 use crate::debug::dbg_break;
 
-use crate::hook::physmem_descriptor::PhysicalMemoryDescriptor;
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
+use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
 use crate::svm::Processors;
 use core::panic::PanicInfo;
 use log::{KernelLogger, LevelFilter};
