@@ -70,7 +70,7 @@ extern "system" {
 
     pub fn MmFreeContiguousMemory(BaseAddress: PVOID);
 
-    pub fn KeBugCheck(BugCheckCode: u32);
+    pub fn KeBugCheck(BugCheckCode: u32) -> !;
 
     pub fn KeGetCurrentIrql() -> KIRQL;
 

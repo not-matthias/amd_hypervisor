@@ -1,16 +1,18 @@
 use crate::debug::dbg_break;
 use crate::nt::addresses::physical_address;
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
-use crate::svm::data::guest::{GuestContext, GuestRegisters};
+use crate::nt::ptr::Pointer;
+use crate::svm::data::guest::GuestRegisters;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
 use crate::svm::events::EventInjection;
 use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
+
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
-// TODO: Use this as return value
+#[derive(PartialOrd, PartialEq)]
 pub enum ExitType {
     ExitHypervisor,
     IncrementRIP,
@@ -18,11 +20,11 @@ pub enum ExitType {
 
 pub const CPUID_DEVIRTUALIZE: u64 = 0x41414141;
 
-pub fn handle_cpuid(_data: *mut ProcessorData, guest_context: &mut GuestContext) {
+pub fn handle_cpuid(_data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
     // Execute cpuid as requested
     //
-    let leaf = unsafe { (*guest_context.guest_regs).rax };
-    let subleaf = unsafe { (*guest_context.guest_regs).rcx };
+    let leaf = guest_regs.rax;
+    let subleaf = guest_regs.rcx;
 
     let mut cpuid = cpuid!(leaf, subleaf);
 
@@ -60,24 +62,24 @@ pub fn handle_cpuid(_data: *mut ProcessorData, guest_context: &mut GuestContext)
             cpuid.edx = 0;
         }
         CPUID_DEVIRTUALIZE => {
-            guest_context.exit_vm = true;
+            return ExitType::ExitHypervisor;
         }
         _ => {}
     }
 
     // Store the result
     //
-    unsafe {
-        (*guest_context.guest_regs).rax = cpuid.eax as u64;
-        (*guest_context.guest_regs).rbx = cpuid.ebx as u64;
-        (*guest_context.guest_regs).rcx = cpuid.ecx as u64;
-        (*guest_context.guest_regs).rdx = cpuid.edx as u64;
-    }
+    guest_regs.rax = cpuid.eax as u64;
+    guest_regs.rbx = cpuid.ebx as u64;
+    guest_regs.rcx = cpuid.ecx as u64;
+    guest_regs.rdx = cpuid.edx as u64;
+
+    ExitType::IncrementRIP
 }
 
-pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
-    let msr = unsafe { (*guest_context.guest_regs).rcx as u32 };
-    let write_access = unsafe { (*data).guest_vmcb.control_area.exit_info1 } != 0;
+pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
+    let msr = guest_regs.rcx as u32;
+    let write_access = data.guest_vmcb.control_area.exit_info1 != 0;
 
     // Prevent IA32_EFER from being modified
     //
@@ -85,8 +87,8 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
         #[cfg(not(feature = "no-assertions"))]
         assert!(write_access);
 
-        let low_part = unsafe { (*guest_context.guest_regs).rax as u32 };
-        let high_part = unsafe { (*guest_context.guest_regs).rdx as u32 };
+        let low_part = guest_regs.rax as u32;
+        let high_part = guest_regs.rdx as u32;
         let value = (high_part as u64) << 32 | low_part as u64;
 
         // The guest is trying to enable SVM.
@@ -109,7 +111,7 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
         // See `Extended Feature Enable Register (EFER)` for what values are allowed.
         // TODO: Implement this check
         //
-        unsafe { (*data).guest_vmcb.save_area.efer = value };
+        data.guest_vmcb.save_area.efer = value;
     } else {
         // Execute rdmsr or wrmsr as requested by the guest.
         //
@@ -117,8 +119,8 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
         //            the host. See SimpleSvm for more information on how to handle this correctly.
         //
         if write_access {
-            let low_part = unsafe { (*guest_context.guest_regs).rax as u32 };
-            let high_part = unsafe { (*guest_context.guest_regs).rdx as u32 };
+            let low_part = guest_regs.rax as u32;
+            let high_part = guest_regs.rdx as u32;
 
             let value = (high_part as u64) << 32 | low_part as u64;
 
@@ -126,27 +128,36 @@ pub fn handle_msr(data: *mut ProcessorData, guest_context: &mut GuestContext) {
         } else {
             let value = unsafe { rdmsr(msr) };
 
-            unsafe { (*guest_context.guest_regs).rax = (value as u32) as u64 };
-            unsafe { (*guest_context.guest_regs).rdx = (value >> 32) as u64 };
+            guest_regs.rax = (value as u32) as u64;
+            guest_regs.rdx = (value >> 32) as u64;
         }
     }
+
+    ExitType::IncrementRIP
 }
 
-pub fn handle_vmrun(data: *mut ProcessorData, _: &mut GuestContext) {
+pub fn handle_vmrun(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     // Inject #GP exception
     //
     EventInjection::gp().inject(data);
+
+    ExitType::IncrementRIP
 }
 
-pub fn handle_break_point_exception(data: *mut ProcessorData, _guest_context: &mut GuestContext) {
+pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     // TODO:
     // - Find hook entry for the address (current rip)
     // - Set rip to the hook handler otherwise inject #BP
 
     EventInjection::bp().inject(data);
+
+    ExitType::IncrementRIP
 }
 
-pub fn handle_nested_page_fault(_data: *mut ProcessorData, _guest_context: &mut GuestContext) {
+pub fn handle_nested_page_fault(
+    _data: &mut ProcessorData,
+    _guest_context: &mut GuestRegisters,
+) -> ExitType {
     // TODO:
     // - Make sure there's no way to scan physical memory to find the hook
     //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
@@ -185,50 +196,78 @@ pub fn handle_nested_page_fault(_data: *mut ProcessorData, _guest_context: &mut 
     //     // Hooked page jumped outside. Hide hook.
     //     hide_hook();
     // }
+
+    ExitType::IncrementRIP
+}
+
+unsafe fn exit_hypervisor(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) {
+    // Set return values of cpuid as follows:
+    // - rbx = address to return
+    // - rcx = stack pointer to restore
+    //
+    guest_regs.rax = data as *mut _ as u32 as u64;
+    guest_regs.rdx = data as *mut _ as u64 >> 32;
+
+    guest_regs.rbx = data.guest_vmcb.control_area.nrip;
+    guest_regs.rcx = data.guest_vmcb.save_area.rsp;
+
+    // Load guest state (currently host state is loaded)
+    ////
+    let guest_vmcb_pa = physical_address(&data.guest_vmcb as *const _ as _).as_u64();
+    asm!("vmload rax", in("rax") guest_vmcb_pa);
+
+    // Set the global interrupt flag (GIF) but still disable interrupts by
+    // clearing IF. GIF must be set to return to the normal execution, but
+    // interruptions are not desirable until SVM is disabled as it would
+    // execute random kernel-code in the host context.
+    //
+    asm!("cli");
+    asm!("stgi");
+
+    // Disable svm.
+    //
+    let msr = rdmsr(IA32_EFER) & !EFER_SVME;
+    wrmsr(IA32_EFER, msr);
+
+    // Restore guest eflags.
+    //
+    // See:
+    // - https://docs.microsoft.com/en-us/cpp/intrinsics/writeeflags
+    // - https://www.felixcloutier.com/x86/popf:popfd:popfq
+    //
+    asm!("push {}; popfq", in(reg) (*data).guest_vmcb.save_area.rflags);
 }
 
 #[no_mangle]
 unsafe extern "stdcall" fn handle_vmexit(
-    data: *mut ProcessorData,
-    guest_registers: *mut GuestRegisters,
+    mut data: Pointer<ProcessorData>,
+    mut guest_regs: Pointer<GuestRegisters>,
 ) -> u8 {
-    let mut guest_context = GuestContext::new(guest_registers, false);
-
     // Load host state that is not loaded on #VMEXIT.
     //
-    asm!("vmload rax", in("rax") (*data).host_stack_layout.host_vmcb_pa);
+    asm!("vmload rax", in("rax") data.host_stack_layout.host_vmcb_pa);
 
-    #[cfg(not(feature = "no-assertions"))]
-    assert_eq!((*data).host_stack_layout.reserved_1, u64::MAX);
+    // #[cfg(not(feature = "no-assertions"))]
+    assert_eq!(data.host_stack_layout.reserved_1, u64::MAX);
 
     // Guest's RAX is overwritten by the host's value on #VMEXIT and saved in
     // the VMCB instead. Reflect the guest RAX to the context.
     //
-    (*guest_registers).rax = (*data).guest_vmcb.save_area.rax;
+    guest_regs.rax = data.guest_vmcb.save_area.rax;
 
     // Update the trap frame
     //
-    (*data).host_stack_layout.trap_frame.rsp = (*data).guest_vmcb.save_area.rsp;
-    (*data).host_stack_layout.trap_frame.rip = (*data).guest_vmcb.control_area.nrip;
+    data.host_stack_layout.trap_frame.rsp = data.guest_vmcb.save_area.rsp;
+    data.host_stack_layout.trap_frame.rip = data.guest_vmcb.control_area.nrip;
 
     // Handle #VMEXIT
     //
-    match (*data).guest_vmcb.control_area.exit_code {
-        VmExitCode::VMEXIT_CPUID => {
-            handle_cpuid(data, &mut guest_context);
-        }
-        VmExitCode::VMEXIT_MSR => {
-            handle_msr(data, &mut guest_context);
-        }
-        VmExitCode::VMEXIT_VMRUN => {
-            handle_vmrun(data, &mut guest_context);
-        }
-        VmExitCode::VMEXIT_EXCEPTION_BP => {
-            handle_break_point_exception(data, &mut guest_context);
-        }
-        VmExitCode::VMEXIT_NPF => {
-            handle_nested_page_fault(data, &mut guest_context);
-        }
+    let exit_type = match data.guest_vmcb.control_area.exit_code {
+        VmExitCode::VMEXIT_CPUID => handle_cpuid(&mut data, &mut guest_regs),
+        VmExitCode::VMEXIT_MSR => handle_msr(&mut data, &mut guest_regs),
+        VmExitCode::VMEXIT_VMRUN => handle_vmrun(&mut data, &mut guest_regs),
+        VmExitCode::VMEXIT_EXCEPTION_BP => handle_break_point_exception(&mut data, &mut guest_regs),
+        VmExitCode::VMEXIT_NPF => handle_nested_page_fault(&mut data, &mut guest_regs),
         _ => {
             // Invalid #VMEXIT. This should never happen.
             //
@@ -237,54 +276,21 @@ unsafe extern "stdcall" fn handle_vmexit(
 
             KeBugCheck(MANUALLY_INITIATED_CRASH);
         }
+    };
+
+    // Handle the exit status of the vmexit handlers
+    //
+    match exit_type {
+        ExitType::ExitHypervisor => exit_hypervisor(&mut data, &mut guest_regs),
+        ExitType::IncrementRIP => {
+            // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
+            // RAX is loaded from VMCB on VMRUN. Afterwards, advance RIP to "complete" the
+            // instruction.
+            //
+            data.guest_vmcb.save_area.rax = guest_regs.rax;
+            data.guest_vmcb.save_area.rip = data.guest_vmcb.control_area.nrip;
+        }
     }
 
-    // Terminate hypervisor if requested.
-    //
-    if guest_context.exit_vm {
-        // Set return values of cpuid as follows:
-        // - rbx = address to return
-        // - rcx = stack pointer to restore
-        //
-        (*guest_context.guest_regs).rax = data as u32 as u64;
-        (*guest_context.guest_regs).rdx = data as u64 >> 32;
-
-        (*guest_context.guest_regs).rbx = (*data).guest_vmcb.control_area.nrip;
-        (*guest_context.guest_regs).rcx = (*data).guest_vmcb.save_area.rsp;
-
-        // Load guest state (currently host state is loaded)
-        ////
-        let guest_vmcb_pa = physical_address(&(*data).guest_vmcb as *const _ as _).as_u64();
-        asm!("vmload rax", in("rax") guest_vmcb_pa);
-
-        // Set the global interrupt flag (GIF) but still disable interrupts by
-        // clearing IF. GIF must be set to return to the normal execution, but
-        // interruptions are not desirable until SVM is disabled as it would
-        // execute random kernel-code in the host context.
-        //
-        asm!("cli");
-        asm!("stgi");
-
-        // Disable svm.
-        //
-        let msr = rdmsr(IA32_EFER) & !EFER_SVME;
-        wrmsr(IA32_EFER, msr);
-
-        // Restore guest eflags.
-        //
-        // See:
-        // - https://docs.microsoft.com/en-us/cpp/intrinsics/writeeflags
-        // - https://www.felixcloutier.com/x86/popf:popfd:popfq
-        //
-        asm!("push {}; popfq", in(reg) (*data).guest_vmcb.save_area.rflags);
-    }
-
-    // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
-    // RAX is loaded from VMCB on VMRUN. Afterwards, advance RIP to "complete" the
-    // instruction.
-    //
-    (*data).guest_vmcb.save_area.rax = (*guest_context.guest_regs).rax;
-    (*data).guest_vmcb.save_area.rip = (*data).guest_vmcb.control_area.nrip;
-
-    guest_context.exit_vm as u8
+    (exit_type == ExitType::ExitHypervisor) as u8
 }

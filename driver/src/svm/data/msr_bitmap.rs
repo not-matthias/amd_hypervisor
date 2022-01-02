@@ -46,7 +46,7 @@ impl MsrBitmap {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
         //
         let mut bitmap_header: MaybeUninit<RTL_BITMAP> = MaybeUninit::uninit();
-        let bitmap_header_ptr = bitmap_header.as_mut_ptr() as *mut RTL_BITMAP;
+        let bitmap_header_ptr = bitmap_header.as_mut_ptr() as *mut _;
 
         // Setup and clear all bits, indicating no MSR access should be intercepted.
         //

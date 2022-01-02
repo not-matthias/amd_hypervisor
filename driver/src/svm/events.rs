@@ -56,9 +56,7 @@ impl EventInjection {
     }
 
     /// Injects the current event into the guest vmcb.
-    pub fn inject(&self, data: *mut ProcessorData) {
-        unsafe {
-            (*data).guest_vmcb.control_area.event_inj = self.0;
-        }
+    pub fn inject(&self, data: &mut ProcessorData) {
+        data.guest_vmcb.control_area.event_inj = self.0;
     }
 }

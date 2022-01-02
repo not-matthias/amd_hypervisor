@@ -38,8 +38,6 @@ fn panic(_info: &PanicInfo<'_>) -> ! {
     dbg_break!();
 
     unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
-
-    loop {}
 }
 
 #[lang = "eh_personality"]
