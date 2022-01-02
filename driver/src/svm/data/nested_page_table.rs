@@ -1,13 +1,21 @@
+extern crate alloc;
+
 use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::PFN_MASK;
+use crate::svm::paging::{AccessType, PFN_MASK};
 use crate::PhysicalMemoryDescriptor;
-
+use alloc::vec::Vec;
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
     PML4Entry, PML4Flags, VAddr, BASE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT, PML4,
 };
+
+pub struct DynamicNpt {
+    pml4: Vec<PML4>,
+    pdpt: Vec<PDPT>,
+    pd: Vec<PD>,
+}
 
 #[repr(C, align(4096))]
 pub struct NestedPageTable {
@@ -100,12 +108,28 @@ impl NestedPageTable {
         Some(npt)
     }
 
+    pub fn identity_new() -> Option<AllocatedMemory<Self>> {
+        log::info!("Building nested page tables");
+
+        let mut npt =
+            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+
+        const _512GB: u64 = 512 * 1024 * 1024 * 1024;
+
+        for pa in (0.._512GB).step_by(BASE_PAGE_SIZE) {
+            npt.map_2mb(pa, pa, AccessType::READ_WRITE_EXCUTE);
+        }
+
+        Some(npt)
+    }
+
     /// Builds the nested page table to cover for the entire physical memory address space.
     ///
     ///
-    pub fn system() -> Option<()> {
+    pub fn system() -> Option<AllocatedMemory<Self>> {
         let desc = PhysicalMemoryDescriptor::new()?;
-        let npt = AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+        let mut npt =
+            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
 
         // NPT entries based on the physical memory ranges.
         //
@@ -113,11 +137,9 @@ impl NestedPageTable {
             let base_address = range.base_page() * BASE_PAGE_SIZE as u64;
 
             for page_index in 0..range.page_count() {
-                let indexed_address = base_address + page_index * BASE_PAGE_SIZE as u64;
+                let address = base_address + page_index * BASE_PAGE_SIZE as u64;
 
-                let _entry = npt.build_sub_tables(indexed_address);
-                // TODO: Check if entry is valid
-                //
+                npt.map_2mb(address, address, AccessType::READ_WRITE_EXCUTE);
             }
         }
 
@@ -132,18 +154,81 @@ impl NestedPageTable {
 
         // Compute max PDPT index based on last descriptor entry that describes the highest pa.
         //
-        let last_range = desc.ranges.last().unwrap();
-        let _base_address = last_range.base_page() * BASE_PAGE_SIZE as u64;
-        // let _max_pdp_index =
-        //     (base_address + last_range.page_count() * BASE_PAGE_SIZE as u64).pdp_index();
-        // TODO: ROUND_TO_SIZE
-        // maxPpeIndex = ROUND_TO_SIZE(baseAddr + currentRun->PageCount * PAGE_SIZE,
-        //                             oneGigabyte) / oneGigabyte;
+        // let last_range = desc.ranges.last().unwrap();
+        // let _base_address = last_range.base_page() * BASE_PAGE_SIZE as u64;
+        // // let _max_pdp_index =
+        // //     (base_address + last_range.page_count() * BASE_PAGE_SIZE as u64).pdp_index();
+        // // TODO: ROUND_TO_SIZE
+        // // maxPpeIndex = ROUND_TO_SIZE(baseAddr + currentRun->PageCount * PAGE_SIZE,
+        // //                             oneGigabyte) / oneGigabyte;
 
-        Some(())
+        Some(npt)
     }
 
-    fn build_sub_tables(self: &AllocatedMemory<Self>, physical_address: u64) -> () {
+    #[inline(always)]
+    fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+        // TODO: Use access_type
+        let _ = access_type;
+
+        let guest_pa = VAddr::from(guest_pa);
+        let host_pa = VAddr::from(host_pa);
+
+        // PML4 (512 GB)
+        //
+        let pml4_index = pml4_index(guest_pa);
+        let pml4_entry = &mut self.pml4[pml4_index];
+
+        if !pml4_entry.is_present() {
+            *pml4_entry = PML4Entry::new(
+                physical_address(self.pdp_entries.as_ptr() as _),
+                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
+            );
+        }
+
+        // PDPT (1 GB)
+        //
+        let pdpt_index = pdpt_index(guest_pa);
+        let pdpt_entry = &mut self.pdp_entries[pdpt_index];
+
+        if !pdpt_entry.is_present() {
+            let pa = physical_address(self.pd_entries[pdpt_index].as_ptr() as _);
+            *pdpt_entry = PDPTEntry::new(
+                pa,
+                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]),
+            );
+        }
+
+        // PD (2 MB)
+        //
+        let pd_index = pd_index(guest_pa);
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+
+        if !pd_entry.is_present() {
+            // In 2MB pages, the PDE contains the 20 bit offset to the physical address. Instead of
+            // using `pt_index` which returns the last 12 bits, we need to calculate the offset ourselves.
+            //
+            // See `5.3.4 2-Mbyte Page Translation` for more information.
+            //
+            let mask = (1 << 20) - 1; // 0xfffff = 0b11111111111111111111
+            let page_offset = host_pa.as_u64() & mask;
+
+            // TODO: Does that even work? We use host_pa for the other addresses but here we use the
+            //       physical address? What if guest_pa is in pdpt[3] and host_pa is in pdpt[4]?
+            //
+            // I guess they have to be just right next to each other so that we can choose the correct page.
+            //
+
+            // TODO: Why do we need to do this?
+            let pfn = page_offset << 21 & PFN_MASK;
+
+            *pd_entry = PDEntry::new(
+                PAddr::from(pfn),
+                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::PS]),
+            );
+        }
+    }
+
+    fn build_sub_tables(&mut self, physical_address: u64) -> () {
         let physical_address = VAddr::from(physical_address);
 
         // TODO: NptOperation -> FindOperation or BuildOperation
@@ -181,28 +266,9 @@ impl NestedPageTable {
         todo!()
     }
 
-    // TODO: Implement
-    fn _build_npt_entry(self: &AllocatedMemory<Self>, _physical_address: Option<u64>) {
-        // TODO: Allow to pass these through the parameter (pml4, pdpt, pdp, pd)
-        // let pml4 = PML4Entry(0);
-
-        // let page_frame_number;
-        // if let Some(physical_address) = physical_address {
-        //     page_frame_number = pfn_from_pa!(physical_address);
-        // } else {
-        //     // TODO: Allocate npt entry and set in preallocated table in hook data
-        //     //
-        //     let sub_table = 0x0; // allocate_npt_entry
-        //     page_frame_number = pfn_from_va!(sub_table);
-        // }
-
-        // Entry->Fields.Valid = TRUE;
-        // Entry->Fields.Write = TRUE;
-        // Entry->Fields.User = TRUE;
-        // Entry->Fields.PageFrameNumber = pageFrameNumber;
+    fn change_permissions(&mut self, _permission: ()) {
+        // TODO: Iterate over all or only pml4?
     }
-
-    fn _map_2b(_host_pa: u64, _guest_va: u64) {}
 
     // TODO:
     // - Implement system()

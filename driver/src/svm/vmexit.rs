@@ -158,6 +158,8 @@ pub fn handle_nested_page_fault(
     _data: &mut ProcessorData,
     _guest_context: &mut GuestRegisters,
 ) -> ExitType {
+    dbg_break!();
+
     // TODO:
     // - Make sure there's no way to scan physical memory to find the hook
     //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.

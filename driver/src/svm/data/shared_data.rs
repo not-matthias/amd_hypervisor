@@ -14,7 +14,7 @@ impl SharedData {
 
         let mut data = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
         data.msr_permission_map = MsrBitmap::new()?;
-        data.npt = NestedPageTable::identity()?;
+        data.npt = NestedPageTable::system()?;
 
         Some(data)
     }
