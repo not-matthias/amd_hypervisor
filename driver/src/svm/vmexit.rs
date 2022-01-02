@@ -50,15 +50,6 @@ pub fn handle_cpuid(_data: *mut ProcessorData, guest_context: &mut GuestContext)
             cpuid.ebx = 0x42;
             cpuid.ecx = 0x42;
             cpuid.edx = 0x42;
-
-            if unsafe { KeGetCurrentIrql() } < 2 {
-                unsafe { x86::tlb::flush_all() };
-
-                log::info!("Marker: {:x}", unsafe { (*_data).marker });
-                log::info!("Shared Marker: {:x}", unsafe {
-                    (*(*_data).shared_data).marker
-                });
-            }
         }
         CPUID_HV_INTERFACE => {
             // Return non Hv#1 value. This indicate that the SimpleSvm does NOT

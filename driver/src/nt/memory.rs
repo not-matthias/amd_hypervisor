@@ -13,7 +13,7 @@ use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
 #[derive(Debug)]
 #[repr(C)]
 pub enum AllocType {
-    Aligned,
+    Normal,
     Contiguous,
 }
 
@@ -27,6 +27,21 @@ pub enum AllocType {
 pub struct AllocatedMemory<T>(*mut T, AllocType);
 
 impl<T> AllocatedMemory<T> {
+    /// Allocates normal non paged memory.
+    pub fn alloc(bytes: usize) -> Option<Self> {
+        let memory = unsafe { ExAllocatePool(NonPagedPool, bytes) };
+        if memory.is_null() {
+            log::warn!("Failed to allocate memory");
+            return None;
+        }
+
+        // Zero the memory
+        //
+        unsafe { RtlZeroMemory(memory as _, bytes) };
+
+        Some(Self(memory as *mut T, AllocType::Normal))
+    }
+
     /// Allocates page aligned, zero filled physical memory.
     pub fn alloc_aligned(bytes: usize) -> Option<Self> {
         log::trace!("Allocating {} bytes of aligned physical memory", bytes);
@@ -45,7 +60,7 @@ impl<T> AllocatedMemory<T> {
             log::warn!("Failed to allocate memory");
             return None;
         }
-        let mut memory = Self(memory as *mut T, AllocType::Aligned);
+        let mut memory = Self(memory as *mut T, AllocType::Normal);
 
         // Make sure it's aligned
         //
@@ -140,7 +155,7 @@ impl<T> Drop for AllocatedMemory<T> {
         log::trace!("Freeing physical memory: {:p} - {:?}", self.0, self.1);
 
         match self.1 {
-            AllocType::Aligned => {
+            AllocType::Normal => {
                 unsafe { ExFreePool(self.0 as _) };
             }
             AllocType::Contiguous => {

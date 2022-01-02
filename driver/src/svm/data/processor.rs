@@ -49,10 +49,6 @@ pub struct ProcessorData {
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub host_state_area: [u8; PAGE_SIZE],
-
-    // TODO: Why does this work, but inside stack layout not?
-    pub marker: u64,
-    pub shared_data: *mut SharedData,
 }
 
 impl ProcessorData {
@@ -62,7 +58,7 @@ impl ProcessorData {
 
     pub fn prepare_for_virtualization(
         self: &mut AllocatedMemory<Self>,
-        shared_data: &mut SharedData,
+        shared_data: *mut SharedData,
         context: Context,
     ) {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L982
@@ -74,8 +70,9 @@ impl ProcessorData {
         let host_state_area_pa =
             physical_address(unsafe { (*self.ptr()).host_state_area.as_ptr() as *const _ });
         let pml4_pa =
-            physical_address(unsafe { (*shared_data.npt.ptr()).pml4.as_ptr() as *const _ as _ });
-        let msr_pm_pa = physical_address(shared_data.msr_permission_map.ptr() as *const _);
+            physical_address(unsafe { (*(*shared_data).npt.ptr()).pml4.as_ptr() as *const _ as _ });
+        let msr_pm_pa =
+            physical_address(unsafe { (*shared_data).msr_permission_map.ptr() as *const _ });
 
         log::trace!("Physical addresses:");
         log::trace!("guest_vmcb_pa: {:x}", guest_vmcb_pa);
@@ -182,9 +179,6 @@ impl ProcessorData {
         //
         log::info!("Setting up the stack layout");
         unsafe {
-            (*self.ptr()).marker = 0x424242;
-            (*self.ptr()).shared_data = shared_data as *mut _;
-
             (*self.ptr()).host_stack_layout.reserved_1 = u64::MAX;
             (*self.ptr()).host_stack_layout.shared_data = shared_data as *mut _;
             (*self.ptr()).host_stack_layout.self_data = self.ptr() as _;

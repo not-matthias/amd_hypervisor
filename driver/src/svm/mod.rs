@@ -23,7 +23,7 @@ pub mod vmexit;
 pub mod vmlaunch;
 
 pub struct Processors {
-    shared_data: SharedData,
+    shared_data: AllocatedMemory<SharedData>,
     processors: Vec<Processor>,
 }
 
@@ -60,7 +60,7 @@ impl Processors {
                 break;
             };
 
-            if !processor.virtualize(&mut self.shared_data) {
+            if !processor.virtualize(self.shared_data.ptr()) {
                 log::error!("Failed to virtualize processor {}", processor.id());
 
                 status = false;
@@ -118,7 +118,7 @@ impl Processor {
         })
     }
 
-    pub fn virtualize(&mut self, shared_data: &mut SharedData) -> bool {
+    pub fn virtualize(&mut self, shared_data: *mut SharedData) -> bool {
         log::info!("Virtualizing processor {}", self.index);
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
