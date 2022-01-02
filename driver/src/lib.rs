@@ -8,6 +8,7 @@
 #![feature(decl_macro)]
 #![feature(arbitrary_self_types)]
 #![feature(const_mut_refs)]
+#![feature(const_ptr_as_ref)]
 
 use crate::debug::dbg_break;
 

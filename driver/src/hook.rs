@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused)]
+
 extern crate alloc;
 
 use crate::nt::memory::AllocatedMemory;
@@ -5,7 +8,6 @@ use crate::svm::data::nested_page_table::NestedPageTable;
 use alloc::string::String;
 use alloc::vec::Vec;
 use nt::kernel::get_system_routine_address;
-use x86::current::paging::PML4;
 
 pub struct Hook {
     address: usize,

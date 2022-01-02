@@ -1,6 +1,6 @@
 use crate::debug::dbg_break;
 use crate::nt::addresses::physical_address;
-use crate::nt::include::{KeBugCheck, KeGetCurrentIrql, MANUALLY_INITIATED_CRASH};
+use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::svm::data::guest::{GuestContext, GuestRegisters};
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
@@ -9,7 +9,6 @@ use crate::svm::vmcb::control_area::VmExitCode;
 use core::arch::asm;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
-use x86_64::structures::idt::ExceptionVector::Page;
 
 // TODO: Use this as return value
 pub enum ExitType {

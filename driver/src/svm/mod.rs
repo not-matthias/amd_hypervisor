@@ -60,7 +60,7 @@ impl Processors {
                 break;
             };
 
-            if !processor.virtualize(self.shared_data.ptr()) {
+            if !processor.virtualize(self.shared_data.as_mut()) {
                 log::error!("Failed to virtualize processor {}", processor.id());
 
                 status = false;
@@ -118,7 +118,7 @@ impl Processor {
         })
     }
 
-    pub fn virtualize(&mut self, shared_data: *mut SharedData) -> bool {
+    pub fn virtualize(&mut self, shared_data: &mut SharedData) -> bool {
         log::info!("Virtualizing processor {}", self.index);
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
@@ -160,8 +160,8 @@ impl Processor {
             log::info!("Launching vm");
 
             let host_rsp =
-                unsafe { &mut (*self.processor_data.ptr()).host_stack_layout.guest_vmcb_pa };
-            unsafe { launch_vm(host_rsp as *mut u64) };
+                &mut self.processor_data.as_mut().host_stack_layout.guest_vmcb_pa as *mut u64;
+            unsafe { launch_vm(host_rsp) };
 
             // We should never continue the guest execution here.
             //

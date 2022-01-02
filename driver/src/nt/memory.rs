@@ -6,6 +6,7 @@ use crate::nt::include::{
 };
 use crate::svm::paging::{page_align, PAGE_SIZE};
 use core::ops::{Deref, DerefMut};
+use core::ptr::NonNull;
 use nt::include::MmIsAddressValid;
 use winapi::um::winnt::RtlZeroMemory;
 use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
@@ -24,7 +25,7 @@ pub enum AllocType {
 /// generics, we can have any abstract data allocated.
 ///
 #[repr(C)]
-pub struct AllocatedMemory<T>(*mut T, AllocType);
+pub struct AllocatedMemory<T>(NonNull<T>, AllocType);
 
 impl<T> AllocatedMemory<T> {
     /// Allocates normal non paged memory.
@@ -39,7 +40,7 @@ impl<T> AllocatedMemory<T> {
         //
         unsafe { RtlZeroMemory(memory as _, bytes) };
 
-        Some(Self(memory as *mut T, AllocType::Normal))
+        Some(Self(NonNull::new(memory as _)?, AllocType::Normal))
     }
 
     /// Allocates page aligned, zero filled physical memory.
@@ -60,18 +61,18 @@ impl<T> AllocatedMemory<T> {
             log::warn!("Failed to allocate memory");
             return None;
         }
-        let mut memory = Self(memory as *mut T, AllocType::Normal);
+        let memory = Self(NonNull::new(memory as _)?, AllocType::Normal);
 
         // Make sure it's aligned
         //
-        if page_align!(memory.0 as usize) != memory.0 as usize {
+        if page_align!(memory.as_ptr() as usize) != memory.as_ptr() as usize {
             log::warn!("Memory is not aligned to a page");
             return None;
         }
 
         // Zero the memory
         //
-        unsafe { RtlZeroMemory(memory.ptr() as _, bytes) };
+        unsafe { RtlZeroMemory(memory.as_ptr() as _, bytes) };
 
         Some(memory)
     }
@@ -112,7 +113,7 @@ impl<T> AllocatedMemory<T> {
         //
         unsafe { RtlZeroMemory(memory, bytes) };
 
-        Some(Self(memory as *mut T, AllocType::Contiguous))
+        Some(Self(NonNull::new(memory as _)?, AllocType::Contiguous))
     }
 
     /// Frees the underlying memory.
@@ -120,28 +121,39 @@ impl<T> AllocatedMemory<T> {
         core::mem::drop(self);
     }
 
-    /// Returns a pointer to the underlying memory.
-    pub const fn ptr(&mut self) -> *mut T {
-        self.0
+    /// Checks whether the underlying memory buffer is null and whether the address pointing to it is valid.
+    pub fn is_valid(&self) -> bool {
+        unsafe { MmIsAddressValid(self.0.as_ref() as *const _ as _) }
     }
 
-    /// Checks whether the underlying memory buffer is null and whether the address pointing to it is valid.
-    pub fn is_valid(&mut self) -> bool {
-        !self.ptr().is_null() && unsafe { MmIsAddressValid(self.ptr() as _) }
+    pub const fn as_ptr(&self) -> *mut T {
+        self.0.as_ptr()
+    }
+
+    pub const fn as_ref(&self) -> &T {
+        unsafe { self.0.as_ref() }
+    }
+
+    pub const fn as_mut(&mut self) -> &mut T {
+        unsafe { self.0.as_mut() }
+    }
+
+    pub const fn inner(&self) -> &NonNull<T> {
+        &self.0
     }
 }
 
 impl<T> Deref for AllocatedMemory<T> {
-    type Target = *mut T;
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        unsafe { self.0.as_ref() }
     }
 }
 
 impl<T> DerefMut for AllocatedMemory<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        unsafe { self.0.as_mut() }
     }
 }
 
@@ -156,10 +168,10 @@ impl<T> Drop for AllocatedMemory<T> {
 
         match self.1 {
             AllocType::Normal => {
-                unsafe { ExFreePool(self.0 as _) };
+                unsafe { ExFreePool(self.0.as_ptr() as _) };
             }
             AllocType::Contiguous => {
-                unsafe { MmFreeContiguousMemory(self.0 as _) };
+                unsafe { MmFreeContiguousMemory(self.0.as_ptr() as _) };
             }
         }
     }

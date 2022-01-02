@@ -27,17 +27,20 @@ pub struct Bitmap {
 }
 // TODO: Figure out how to use this instead.
 
-pub struct MsrBitmap(AllocatedMemory<u32>);
+pub struct MsrBitmap;
 
 impl MsrBitmap {
-    pub fn new() -> Option<Self> {
-        // The MSR permissions bitmap consists of four separate bit vectors of 16
-        // Kbits (2 Kbytes) each. See: `15.11 - MSR Intercepts`.
+    pub fn new() -> Option<AllocatedMemory<u32>> {
+        let memory = AllocatedMemory::<u32>::alloc_contiguous(PAGE_SIZE * 2)?;
+
+        // Setup the msr bitmap
         //
-        Some(Self(AllocatedMemory::alloc_contiguous(PAGE_SIZE * 2)?))
+        Self::build(memory.as_ptr());
+
+        Some(memory)
     }
 
-    pub fn build(mut self) -> Self {
+    fn build(memory: *mut u32) {
         log::info!("Building msr permission bitmap");
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
@@ -50,7 +53,7 @@ impl MsrBitmap {
         unsafe {
             RtlInitializeBitMap(
                 bitmap_header_ptr as _,
-                self.0.ptr() as _,
+                memory as _,
                 (SVM_MSR_PERMISSIONS_MAP_SIZE * CHAR_BIT) as u32,
             )
         }
@@ -67,11 +70,5 @@ impl MsrBitmap {
         // intercepted.
         //
         unsafe { RtlSetBits(bitmap_header_ptr as _, (offset + 1) as u32, 1) };
-
-        self
-    }
-
-    pub fn ptr(&mut self) -> *mut u32 {
-        self.0.ptr()
     }
 }

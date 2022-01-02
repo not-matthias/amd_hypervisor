@@ -1,7 +1,8 @@
 use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::{pfn_from_pa, va_from_pfn, PFN_MASK};
+use crate::svm::paging::PFN_MASK;
 use crate::PhysicalMemoryDescriptor;
+
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
@@ -57,18 +58,23 @@ impl NestedPageTable {
 
         // PML4
         //
-        unsafe {
-            (**npt).pml4[0] = PML4Entry::new(
-                physical_address((**npt).pdp_entries.as_ptr() as _),
-                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
-            )
-        };
+        npt.pml4[0] = PML4Entry::new(
+            physical_address(npt.pdp_entries.as_ptr() as _),
+            PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
+        );
 
         // PDPT
         //
-        for (i, pdp) in unsafe { (**npt).pdp_entries.iter_mut().enumerate() } {
-            // for (i, pdp) in unsafe { (**npt).pdp_entries.iter_mut().enumerate() } {
-            let pa = physical_address(unsafe { (**npt).pd_entries[i].as_ptr() as _ });
+        // Note: We have to use unsafe here to make sure that we can get access to a mutable reference
+        // to the pdp entry. Otherwise we couldn't iterate over the pd entries, since there already
+        // exists a mutable reference.
+        //
+        // Why do we need this? Because the arrays are both stored inside `self`, there could be
+        // accesses to other arrays that we are currently iterating over. This is NOT the case
+        // here, so we can use unsafe.
+        //
+        for (i, pdp) in unsafe { (*npt.inner().as_ptr()).pdp_entries.iter_mut().enumerate() } {
+            let pa = physical_address(npt.pd_entries[i].as_ptr() as _);
             *pdp = PDPTEntry::new(
                 pa,
                 PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]),
@@ -76,7 +82,7 @@ impl NestedPageTable {
 
             // PD
             //
-            for (j, pd) in unsafe { (**npt).pd_entries[i].iter_mut().enumerate() } {
+            for (j, pd) in npt.pd_entries[i].iter_mut().enumerate() {
                 let pa = (i * PAGE_SIZE_ENTRIES + j) as u64;
 
                 // Mask to find the page frame number. We have to use this so that we can use `PDEntry`.
@@ -109,7 +115,7 @@ impl NestedPageTable {
             for page_index in 0..range.page_count() {
                 let indexed_address = base_address + page_index * BASE_PAGE_SIZE as u64;
 
-                let entry = npt.build_sub_tables(indexed_address);
+                let _entry = npt.build_sub_tables(indexed_address);
                 // TODO: Check if entry is valid
                 //
             }
@@ -127,7 +133,7 @@ impl NestedPageTable {
         // Compute max PDPT index based on last descriptor entry that describes the highest pa.
         //
         let last_range = desc.ranges.last().unwrap();
-        let base_address = last_range.base_page() * BASE_PAGE_SIZE as u64;
+        let _base_address = last_range.base_page() * BASE_PAGE_SIZE as u64;
         // let _max_pdp_index =
         //     (base_address + last_range.page_count() * BASE_PAGE_SIZE as u64).pdp_index();
         // TODO: ROUND_TO_SIZE
@@ -176,9 +182,9 @@ impl NestedPageTable {
     }
 
     // TODO: Implement
-    fn build_npt_entry(self: &AllocatedMemory<Self>, physical_address: Option<u64>) {
+    fn _build_npt_entry(self: &AllocatedMemory<Self>, _physical_address: Option<u64>) {
         // TODO: Allow to pass these through the parameter (pml4, pdpt, pdp, pd)
-        let pml4 = PML4Entry(0);
+        // let pml4 = PML4Entry(0);
 
         // let page_frame_number;
         // if let Some(physical_address) = physical_address {
@@ -196,7 +202,7 @@ impl NestedPageTable {
         // Entry->Fields.PageFrameNumber = pageFrameNumber;
     }
 
-    fn map_2b(host_pa: u64, guest_va: u64) {}
+    fn _map_2b(_host_pa: u64, _guest_va: u64) {}
 
     // TODO:
     // - Implement system()

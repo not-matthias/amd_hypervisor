@@ -56,23 +56,16 @@ impl ProcessorData {
         AllocatedMemory::alloc_aligned(core::mem::size_of::<Self>())
     }
 
-    pub fn prepare_for_virtualization(
-        self: &mut AllocatedMemory<Self>,
-        shared_data: *mut SharedData,
-        context: Context,
-    ) {
+    pub fn prepare_for_virtualization(&mut self, shared_data: &mut SharedData, context: Context) {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L982
 
         // Get physical addresses of important data structures
         //
-        let guest_vmcb_pa = physical_address(unsafe { &(*self.ptr()).guest_vmcb as *const _ as _ });
-        let host_vmcb_pa = physical_address(unsafe { &(*self.ptr()).host_vmcb as *const _ as _ });
-        let host_state_area_pa =
-            physical_address(unsafe { (*self.ptr()).host_state_area.as_ptr() as *const _ });
-        let pml4_pa =
-            physical_address(unsafe { (*(*shared_data).npt.ptr()).pml4.as_ptr() as *const _ as _ });
-        let msr_pm_pa =
-            physical_address(unsafe { (*shared_data).msr_permission_map.ptr() as *const _ });
+        let guest_vmcb_pa = physical_address(&self.guest_vmcb as *const _ as _);
+        let host_vmcb_pa = physical_address(&self.host_vmcb as *const _ as _);
+        let host_state_area_pa = physical_address(self.host_state_area.as_ptr() as *const _);
+        let pml4_pa = physical_address(shared_data.npt.as_mut().pml4.as_ptr() as *const _ as _);
+        let msr_pm_pa = physical_address(shared_data.msr_permission_map.as_ptr() as *const _);
 
         log::trace!("Physical addresses:");
         log::trace!("guest_vmcb_pa: {:x}", guest_vmcb_pa);
@@ -95,31 +88,24 @@ impl ProcessorData {
         // Configure which instructions to intercept
         //
         log::info!("Configuring instructions to intercept");
-        unsafe {
-            (*self.ptr())
-                .guest_vmcb
-                .control_area
-                .intercept_misc1
-                .insert(InterceptMisc1::INTERCEPT_CPUID);
+        self.guest_vmcb
+            .control_area
+            .intercept_misc1
+            .insert(InterceptMisc1::INTERCEPT_CPUID);
 
-            (*self.ptr())
-                .guest_vmcb
-                .control_area
-                .intercept_misc2
-                .insert(InterceptMisc2::INTERCEPT_VMRUN);
-        };
+        self.guest_vmcb
+            .control_area
+            .intercept_misc2
+            .insert(InterceptMisc2::INTERCEPT_VMRUN);
 
         // Trigger #VMEXIT on MSR exit as defined in msr permission map.
         //
-        unsafe {
-            (*self.ptr())
-                .guest_vmcb
-                .control_area
-                .intercept_misc1
-                .insert(InterceptMisc1::INTERCEPT_MSR_PROT);
+        self.guest_vmcb
+            .control_area
+            .intercept_misc1
+            .insert(InterceptMisc1::INTERCEPT_MSR_PROT);
 
-            (*self.ptr()).guest_vmcb.control_area.msrpm_base_pa = msr_pm_pa.as_u64();
-        };
+        self.guest_vmcb.control_area.msrpm_base_pa = msr_pm_pa.as_u64();
 
         // Specify guest's address space ID (ASID). TLB is maintained by the ID for
         // guests. Use the same value for all processors since all of them run a
@@ -130,30 +116,27 @@ impl ProcessorData {
         //
         // See this for explanation of what an ASID is: https://stackoverflow.com/a/52725044
         //
-        unsafe { (*self.ptr()).guest_vmcb.control_area.guest_asid = 1 };
+        self.guest_vmcb.control_area.guest_asid = 1;
 
         // Enable nested page tables.
         //
         log::info!("Configuring nested page tables");
-        unsafe {
-            (*self.ptr())
-                .guest_vmcb
-                .control_area
-                .np_enable
-                .insert(NpEnable::NESTED_PAGING);
+        self.guest_vmcb
+            .control_area
+            .np_enable
+            .insert(NpEnable::NESTED_PAGING);
 
-            (*self.ptr()).guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
-            log::info!("Pml4 pa: {:x}", pml4_pa.as_u64());
+        self.guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+        log::info!("Pml4 pa: {:x}", pml4_pa.as_u64());
 
-            // If we don't want to use NPT:
-            //
-            // (*self.ptr()).guest_vmcb.control_area.ncr3 = cr3();
-        };
+        // If we don't want to use NPT:
+        //
+        // self.guest_vmcb.control_area.ncr3 = cr3();
 
         // Setup guest state based on current system state.
         //
         log::info!("Configuring guest state save area");
-        unsafe { (*self.ptr()).guest_vmcb.save_area.build(context) };
+        self.guest_vmcb.save_area.build(context);
 
         // Save some of the current state on VMCB.
         //
@@ -178,12 +161,10 @@ impl ProcessorData {
         // Store data to stack so that the host (hypervisor) can use those values.
         //
         log::info!("Setting up the stack layout");
-        unsafe {
-            (*self.ptr()).host_stack_layout.reserved_1 = u64::MAX;
-            (*self.ptr()).host_stack_layout.shared_data = shared_data as *mut _;
-            (*self.ptr()).host_stack_layout.self_data = self.ptr() as _;
-            (*self.ptr()).host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
-            (*self.ptr()).host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
-        }
+        self.host_stack_layout.reserved_1 = u64::MAX;
+        self.host_stack_layout.shared_data = shared_data as *mut _;
+        self.host_stack_layout.self_data = self as *mut _ as _;
+        self.host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
+        self.host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
     }
 }
