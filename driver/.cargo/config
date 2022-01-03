@@ -1,7 +1,10 @@
 [build]
 target = "x86_64-pc-windows-msvc"
-
 rustflags = [
+    "-C", "target-feature=+sse3,+avx,+avx2",
+    "-C", "target-cpu=native",
+    "-Zshare-generics=y",
+
     #"-C", "link-arg=-fuse-ld=lld",
     #"-C", "panic=abort",
 
