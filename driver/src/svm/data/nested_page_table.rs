@@ -2,15 +2,14 @@ extern crate alloc;
 
 use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::{pfn_from_pa, AccessType, PFN_MASK, _1GB, _2MB, _4KB, _512GB};
+use crate::svm::paging::{AccessType, PFN_MASK, _1GB, _2MB, _512GB};
 use crate::PhysicalMemoryDescriptor;
 use alloc::vec::Vec;
 use elain::Align;
-use x86::apic::x2apic::X2APIC;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
-    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SHIFT, BASE_PAGE_SIZE,
-    LARGE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
+    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SIZE, LARGE_PAGE_SIZE,
+    PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
 };
 use x86::msr::{rdmsr, IA32_APIC_BASE};
 
@@ -360,9 +359,19 @@ impl NestedPageTable {
         Self::unmap_2mb(entry);
     }
 
-    fn change_permissions(&mut self, _permission: ()) {
-        // TODO: Iterate over all or only pml4?
+    fn change_all_permissions(&mut self, _permission: AccessType) {
+        // TODO: Only iterate up to max_pdpt_index
+
+        // Set the permission for all the PDP entries.
+        //
+        for pdp_entry in self.pdp_entries.iter_mut() {
+            pdp_entry.0 |= PDPTFlags::XD.bits();
+        }
     }
+
+    /// Changes the permission of a single page.
+    ///
+    fn change_page_permission(&mut self, _guest_pa: u64, _permission: AccessType) {}
 
     /// Builds the nested page table to cover for the entire physical memory address space.
     ///

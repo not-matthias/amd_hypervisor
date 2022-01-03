@@ -1,8 +1,8 @@
 use crate::nt::addresses::physical_address;
 use crate::nt::include::Context;
 use crate::nt::memory::AllocatedMemory;
+use crate::nt::ptr::Pointer;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
-
 use crate::svm::data::shared_data::SharedData;
 use crate::svm::paging::PAGE_SIZE;
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2, NpEnable};
@@ -10,7 +10,6 @@ use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
 use core::arch::asm;
 use core::ptr::NonNull;
 use nt::include::PVOID;
-
 use x86::msr::wrmsr;
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
@@ -26,8 +25,8 @@ pub struct HostStackLayout {
     pub guest_vmcb_pa: u64,
     pub host_vmcb_pa: u64,
 
-    pub self_data: NonNull<ProcessorData>,
-    pub shared_data: NonNull<SharedData>,
+    pub self_data: Pointer<ProcessorData>,
+    pub shared_data: Pointer<SharedData>,
 
     /// To keep HostRsp 16 bytes aligned
     pub padding_1: u64,
@@ -65,7 +64,8 @@ impl ProcessorData {
         let guest_vmcb_pa = physical_address(&self.guest_vmcb as *const _ as _);
         let host_vmcb_pa = physical_address(&self.host_vmcb as *const _ as _);
         let host_state_area_pa = physical_address(self.host_state_area.as_ptr() as *const _);
-        let pml4_pa = physical_address(shared_data.npt.as_mut().pml4.as_ptr() as *const _ as _);
+        let pml4_pa =
+            physical_address(shared_data.hooked_npt.as_mut().npt.pml4.as_ptr() as *const _ as _);
         let msr_pm_pa = physical_address(shared_data.msr_permission_map.as_ptr() as *const _);
 
         log::trace!("Physical addresses:");
@@ -164,8 +164,9 @@ impl ProcessorData {
         log::info!("Setting up the stack layout");
         self.host_stack_layout.reserved_1 = u64::MAX;
         self.host_stack_layout.shared_data =
-            unsafe { NonNull::new_unchecked(shared_data as *mut _) };
-        self.host_stack_layout.self_data = unsafe { NonNull::new_unchecked(self as *mut _) };
+            Pointer(unsafe { NonNull::new_unchecked(shared_data as *mut _) });
+        self.host_stack_layout.self_data =
+            Pointer(unsafe { NonNull::new_unchecked(self as *mut _) });
         self.host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
         self.host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
     }

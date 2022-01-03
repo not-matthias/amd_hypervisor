@@ -3,14 +3,13 @@ extern crate alloc;
 use crate::nt::include::Context;
 use crate::nt::memory::AllocatedMemory;
 use crate::nt::processor::{processor_count, ProcessorExecutor};
+use crate::support::is_virtualized;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
 use crate::svm::data::shared_data::SharedData;
 use crate::svm::vmexit::CPUID_DEVIRTUALIZE;
 use crate::svm::vmlaunch::launch_vm;
 use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
-
-use crate::support::is_virtualized;
 use alloc::vec::Vec;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
@@ -122,10 +121,6 @@ impl Processor {
         log::info!("Virtualizing processor {}", self.index);
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
-
-        // Build hook data
-        //
-        // TODO: InitializeHookData, builds npt
 
         // IMPORTANT: We have to capture the context right here, so that `launch_vm` continues the
         // execution of the current process at this point of time. If we don't do this,

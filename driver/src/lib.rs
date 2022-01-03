@@ -97,10 +97,6 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     dbg_break!();
 
-    log::info!("{:?}", PhysicalMemoryDescriptor::new());
-
-    // Register `driver_unload` so we can devirtualize the processor later
-    //
     cfg_if::cfg_if! {
         if #[cfg(feature = "mmap")] {
             let _ = driver;

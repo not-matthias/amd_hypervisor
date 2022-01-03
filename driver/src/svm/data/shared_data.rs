@@ -1,11 +1,11 @@
+use crate::hook::HookedNpt;
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::data::msr_bitmap::MsrBitmap;
-use crate::svm::data::nested_page_table::NestedPageTable;
 
 #[repr(C)]
 pub struct SharedData {
     pub msr_permission_map: AllocatedMemory<u32>,
-    pub npt: AllocatedMemory<NestedPageTable>,
+    pub hooked_npt: AllocatedMemory<HookedNpt>,
 }
 
 impl SharedData {
@@ -14,7 +14,10 @@ impl SharedData {
 
         let mut data = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
         data.msr_permission_map = MsrBitmap::new()?;
-        data.npt = NestedPageTable::identity_2mb()?;
+        data.hooked_npt = HookedNpt::new()?;
+        data.hooked_npt.hook("ZwQuerySystemInformation", 0 as _)?;
+
+        // data.hooked_npt = NestedPageTable::identity_2mb()?;
 
         Some(data)
     }

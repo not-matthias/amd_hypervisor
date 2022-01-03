@@ -8,6 +8,7 @@ use crate::svm::data::nested_page_table::NestedPageTable;
 use alloc::string::String;
 use alloc::vec::Vec;
 use nt::kernel::get_system_routine_address;
+use x86::bits64::paging::PAddr;
 
 pub struct Hook {
     address: usize,
@@ -17,9 +18,17 @@ pub struct Hook {
 }
 
 impl Hook {
-    pub fn new(name: String, handler: *const ()) -> Option<Self> {
-        let address = get_system_routine_address(&name)?;
+    fn copy_page(address: usize) -> AllocatedMemory<u8> {
+        let page = PAddr::from(address).align_down_to_base_page();
+
+        todo!()
+    }
+
+    pub fn new(name: &str, handler: *const ()) -> Option<Self> {
+        let address = get_system_routine_address(name)?;
         log::info!("Found address of {}: {:#x}", &name, address);
+
+        // TODO: Copy page
 
         Some(Self {
             address,
@@ -30,16 +39,20 @@ impl Hook {
 }
 
 pub struct HookedNpt {
-    npt: AllocatedMemory<NestedPageTable>,
+    pub npt: AllocatedMemory<NestedPageTable>,
+
+    // TODO: Can we remove these useless allocations?
     hooks: Vec<Hook>,
 }
 
 impl HookedNpt {
-    pub fn new() -> Option<Self> {
-        Some(Self {
-            npt: NestedPageTable::identity()?,
-            hooks: Vec::new(),
-        })
+    pub fn new() -> Option<AllocatedMemory<Self>> {
+        let mut hooked_npt = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
+
+        hooked_npt.npt = NestedPageTable::identity_2mb()?;
+        hooked_npt.hooks = Vec::new();
+
+        Some(hooked_npt)
     }
 
     /// Hooks the specified function.
@@ -49,11 +62,11 @@ impl HookedNpt {
     /// - `function`: The name of the function to hook.
     /// - `handler`: The function that should be called from the hook.
     ///
-    pub fn hook(mut self, function: String, handler: *const ()) -> Option<Self> {
+    pub fn hook(&mut self, function: &str, handler: *const ()) -> Option<()> {
         let hook = Hook::new(function, handler)?;
         self.hooks.push(hook);
 
-        Some(self)
+        Some(())
     }
 
     pub fn visible() -> bool {

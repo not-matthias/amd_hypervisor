@@ -8,7 +8,7 @@ use core::ptr::NonNull;
 /// easier.
 ///
 #[repr(transparent)]
-pub struct Pointer<T>(NonNull<T>);
+pub struct Pointer<T>(pub NonNull<T>);
 
 impl<T> Pointer<T> {
     pub fn new(ptr: *mut T) -> Option<Self> {
