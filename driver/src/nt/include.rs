@@ -72,8 +72,6 @@ extern "system" {
 
     pub fn KeBugCheck(BugCheckCode: u32) -> !;
 
-    pub fn KeGetCurrentIrql() -> KIRQL;
-
     pub fn ZwYieldExecution() -> NTSTATUS;
 
     pub fn PsCreateSystemThread(
@@ -89,6 +87,8 @@ extern "system" {
     pub fn MmGetPhysicalMemoryRanges() -> *mut PhysicalMemoryRange;
 
     pub fn MmGetVirtualForPhysical(PhysicalAddress: PHYSICAL_ADDRESS) -> *mut u64;
+
+    pub fn RtlCopyMemory(destination: *mut u64, source: *mut u64, length: usize);
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes
@@ -421,4 +421,11 @@ impl Context {
 
         unsafe { context.assume_init() }
     }
+}
+
+pub macro assert_paged_code() {
+    assert!(
+        unsafe { $crate::nt::irql::KeGetCurrentIrql() } <= $crate::nt::irql::APC_LEVEL,
+        "Called at IRQL > APC_LEVEL",
+    );
 }

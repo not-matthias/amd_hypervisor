@@ -153,7 +153,7 @@ impl NestedPageTable {
     ///
     /// See:
     /// - https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L245
-    fn split_2mb_to_4kb(&mut self, guest_pa: u64) -> Option<()> {
+    pub fn split_2mb_to_4kb(&mut self, guest_pa: u64) -> Option<()> {
         log::trace!("Splitting 2mb page into 4kb pages: {:x}", guest_pa);
 
         let guest_pa = VAddr::from(guest_pa);
@@ -187,7 +187,7 @@ impl NestedPageTable {
         Some(())
     }
 
-    fn join_4kb_to_2mb(&mut self, guest_pa: u64) -> Option<()> {
+    pub fn join_4kb_to_2mb(&mut self, guest_pa: u64) -> Option<()> {
         log::trace!("Joining 4kb pages into 2mb page: {:x}", guest_pa);
 
         let guest_pa = VAddr::from(guest_pa);
@@ -347,7 +347,7 @@ impl NestedPageTable {
         Self::unmap_2mb(entry);
     }
 
-    fn change_all_permissions(&mut self, _permission: AccessType) {
+    pub fn change_all_permissions(&mut self, _permission: AccessType) {
         // TODO: Only iterate up to max_pdpt_index
 
         // Set the permission for all the PDP entries.
@@ -359,7 +359,11 @@ impl NestedPageTable {
 
     /// Changes the permission of a single page.
     ///
-    fn change_page_permission(&mut self, _guest_pa: u64, _permission: AccessType) {}
+    pub fn change_page_permission(&mut self, _guest_pa: u64, _permission: AccessType) {
+        //
+        //
+        // TODO: Implement this
+    }
 
     /// Builds the nested page table to cover for the entire physical memory address space.
     ///

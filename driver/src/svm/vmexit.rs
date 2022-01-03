@@ -158,6 +158,8 @@ pub fn handle_nested_page_fault(
     _data: &mut ProcessorData,
     _guest_context: &mut GuestRegisters,
 ) -> ExitType {
+    let hooked_npt = &_data.host_stack_layout.shared_data.hooked_npt;
+
     dbg_break!();
 
     // TODO:

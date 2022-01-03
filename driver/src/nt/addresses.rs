@@ -23,6 +23,14 @@ impl PhysicalAddress {
         self.0.as_u64() >> BASE_PAGE_SHIFT
     }
 
+    pub fn pa(&self) -> u64 {
+        self.0.as_u64()
+    }
+
+    pub fn aligned_pa(&self) -> u64 {
+        self.0.align_down_to_base_page().as_u64()
+    }
+
     fn pa_from_va(va: u64) -> u64 {
         unsafe { *MmGetPhysicalAddress(va as _).QuadPart() as u64 }
     }

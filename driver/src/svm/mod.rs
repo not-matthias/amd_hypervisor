@@ -164,6 +164,9 @@ impl Processor {
             unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
         }
 
+        // TODO: Move this to the vmexit handler
+        shared_data.hooked_npt.enable();
+
         true
     }
 

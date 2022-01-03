@@ -3,37 +3,70 @@
 
 extern crate alloc;
 
+use crate::dbg_break;
+use crate::nt::addresses::PhysicalAddress;
+use crate::nt::include::{assert_paged_code, RtlCopyMemory};
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::data::nested_page_table::NestedPageTable;
+use crate::svm::paging::AccessType;
 use alloc::string::String;
 use alloc::vec::Vec;
 use nt::kernel::get_system_routine_address;
-use x86::bits64::paging::PAddr;
+use x86::bits64::paging::{PAddr, BASE_PAGE_SIZE};
+use x86_64::instructions::interrupts::without_interrupts;
 
 pub struct Hook {
-    address: usize,
+    /// The address of the original function.    
+    address: u64,
+
+    /// The physical address of the original function.
+    physical_address: PhysicalAddress,
     handler: *const (),
 
     page: AllocatedMemory<u8>,
 }
 
 impl Hook {
-    fn copy_page(address: usize) -> AllocatedMemory<u8> {
-        let page = PAddr::from(address).align_down_to_base_page();
+    fn copy_page(address: u64) -> Option<AllocatedMemory<u8>> {
+        // Why does this crash because of a page fault? See: https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/when-should-code-and-data-be-pageable-
 
-        todo!()
+        log::info!("Creating a copy of the page at {:#x}", address);
+
+        let page_address = PAddr::from(address).align_down_to_base_page();
+        if page_address.is_zero() {
+            log::error!("Invalid address: {:#x}", address);
+            return None;
+        }
+        let page = AllocatedMemory::<u8>::alloc(BASE_PAGE_SIZE)?;
+
+        log::info!("Page address: {:#x}", page_address);
+
+        assert_paged_code!();
+
+        without_interrupts(|| {
+            unsafe {
+                RtlCopyMemory(
+                    page.as_ptr() as _,
+                    page_address.as_u64() as *mut u64,
+                    BASE_PAGE_SIZE,
+                )
+            };
+        });
+
+        log::info!("After copying the memory.");
+
+        Some(page)
     }
 
     pub fn new(name: &str, handler: *const ()) -> Option<Self> {
-        let address = get_system_routine_address(name)?;
+        let address = get_system_routine_address(name)? as u64;
         log::info!("Found address of {}: {:#x}", &name, address);
-
-        // TODO: Copy page
 
         Some(Self {
             address,
+            physical_address: PhysicalAddress::from_va(address),
             handler,
-            page: AllocatedMemory::alloc_contiguous(0x1000)?,
+            page: Self::copy_page(address)?,
         })
     }
 }
@@ -67,6 +100,25 @@ impl HookedNpt {
         self.hooks.push(hook);
 
         Some(())
+    }
+
+    pub fn enable(&mut self) -> Option<()> {
+        // TODO: Should we update an internal state? Is it a problem if we do it multiple times?
+
+        // Split 2mb page into 4kb pages, and set the hooked page to RW
+        //
+        for hook in self.hooks.iter() {
+            self.npt
+                .split_2mb_to_4kb(hook.physical_address.aligned_pa())?;
+            self.npt
+                .change_page_permission(hook.physical_address.aligned_pa(), AccessType::READ_WRITE);
+        }
+
+        Some(())
+    }
+
+    pub fn disable(&mut self) {
+        // TODO: Implement this
     }
 
     pub fn visible() -> bool {
