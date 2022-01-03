@@ -13,18 +13,6 @@ use x86::bits64::paging::{
 };
 use x86::msr::{rdmsr, IA32_APIC_BASE};
 
-pub struct DynamicNpt {
-    pml4: PML4Entry,
-    pdpt: Vec<PDPT>,
-    pd: Vec<PD>,
-}
-
-impl DynamicNpt {
-    pub fn system() -> Option<Self> {
-        todo!()
-    }
-}
-
 /// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
 pub struct NestedPageTable {
