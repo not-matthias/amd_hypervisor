@@ -85,7 +85,7 @@ fn virtualize_system() -> Option<()> {
 
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
+    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
 
     // TODO: Set this up.
     // com_logger::builder()

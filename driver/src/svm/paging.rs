@@ -3,6 +3,11 @@ use crate::nt::addresses::PhysicalAddress;
 use bitflags::bitflags;
 use x86::bits64::paging::{PML4Entry, MAXPHYADDR};
 
+pub const _512GB: u64 = 512 * 1024 * 1024 * 1024;
+pub const _1GB: u64 = 1024 * 1024 * 1024;
+pub const _2MB: usize = 2 * 1024 * 1024;
+pub const _4KB: usize = 4 * 1024;
+
 // TODO: Replaec with BASE_PAGE_SIZE
 pub const PAGE_SHIFT: u64 = 12;
 pub const PAGE_SIZE: usize = 0x1000;

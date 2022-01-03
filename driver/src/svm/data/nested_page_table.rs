@@ -2,15 +2,17 @@ extern crate alloc;
 
 use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::{pfn_from_pa, AccessType, PFN_MASK};
+use crate::svm::paging::{pfn_from_pa, AccessType, PFN_MASK, _1GB, _2MB, _4KB, _512GB};
 use crate::PhysicalMemoryDescriptor;
 use alloc::vec::Vec;
 use elain::Align;
+use x86::apic::x2apic::X2APIC;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
-    PML4Entry, PML4Flags, VAddr, BASE_PAGE_SHIFT, BASE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT,
-    PML4,
+    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SHIFT, BASE_PAGE_SIZE,
+    LARGE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
 };
+use x86::msr::{rdmsr, IA32_APIC_BASE};
 
 pub struct DynamicNpt {
     pml4: PML4Entry,
@@ -24,6 +26,7 @@ impl DynamicNpt {
     }
 }
 
+/// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
 pub struct NestedPageTable {
     pub pml4: PML4,
@@ -34,6 +37,8 @@ pub struct NestedPageTable {
 
     pub pd_entries: [PD; 512],
     align_2: Align<4096>,
+
+    pub pt_entries: [[PT; 512]; 512],
 }
 
 impl NestedPageTable {
@@ -126,14 +131,11 @@ impl NestedPageTable {
         Some(npt)
     }
 
-    pub fn identity_new() -> Option<AllocatedMemory<Self>> {
-        log::info!("Building nested page tables");
+    pub fn identity_2mb() -> Option<AllocatedMemory<Self>> {
+        log::info!("Building nested page tables with 2MB pages");
 
         let mut npt =
             AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
-
-        const _512GB: u64 = 512 * 1024 * 1024 * 1024;
-        const _2MB: usize = 2 * 1024 * 1024;
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(_2MB) {
@@ -143,46 +145,92 @@ impl NestedPageTable {
         Some(npt)
     }
 
-    /// Builds the nested page table to cover for the entire physical memory address space.
-    ///
-    ///
-    pub fn system() -> Option<AllocatedMemory<Self>> {
-        let desc = PhysicalMemoryDescriptor::new()?;
+    pub fn identity_4kb() -> Option<AllocatedMemory<Self>> {
+        log::info!("Building nested page tables with 4KB pages");
+
         let mut npt =
             AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
 
-        // NPT entries based on the physical memory ranges.
-        //
-        for range in desc.ranges {
-            let base_address = range.base_page() * BASE_PAGE_SIZE as u64;
-
-            for page_index in 0..range.page_count() {
-                let address = base_address + page_index * BASE_PAGE_SIZE as u64;
-
-                npt.map_2mb(address, address, AccessType::READ_WRITE_EXCUTE);
-            }
+        log::info!("Mapping 512GB of physical memory");
+        for pa in (0.._512GB).step_by(BASE_PAGE_SIZE) {
+            npt.map_4kb(pa, pa, AccessType::READ_WRITE_EXCUTE);
         }
 
-        // Entry for APIC base
-        //
-        // apicBase.AsUInt64 = __readmsr(IA32_APIC_BASE);
-        // entry = BuildSubTables(pml4Table, apicBase.Fields.ApicBase * PAGE_SIZE, FALSE);
-        // if (entry == nullptr) {
-        //     status = STATUS_INSUFFICIENT_RESOURCES;
-        //     goto Exit;
-        // }
-
-        // Compute max PDPT index based on last descriptor entry that describes the highest pa.
-        //
-        // let last_range = desc.ranges.last().unwrap();
-        // let _base_address = last_range.base_page() * BASE_PAGE_SIZE as u64;
-        // // let _max_pdp_index =
-        // //     (base_address + last_range.page_count() * BASE_PAGE_SIZE as u64).pdp_index();
-        // // TODO: ROUND_TO_SIZE
-        // // maxPpeIndex = ROUND_TO_SIZE(baseAddr + currentRun->PageCount * PAGE_SIZE,
-        // //                             oneGigabyte) / oneGigabyte;
-
         Some(npt)
+    }
+
+    /// Splits a large 2MB page into 512 smaller 4KB pages.
+    ///
+    /// This is needed to apply more granular hooks and to reduce the number of page faults
+    /// that occur when the guest tries to access a page that is hooked.
+    ///
+    /// See:
+    /// - https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L245
+    fn split_2mb_to_4kb(&mut self, guest_pa: u64) -> Option<()> {
+        log::trace!("Splitting 2mb page into 4kb pages: {:x}", guest_pa);
+
+        let guest_pa = VAddr::from(guest_pa);
+
+        let pdpt_index = pdpt_index(guest_pa);
+        let pd_index = pd_index(guest_pa);
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+
+        // We can only split large pages and not page directories.
+        // If it's a page directory, it is already split.
+        //
+        if !pd_entry.is_page() {
+            log::warn!("Tried to split a page directory: {:x}.", guest_pa);
+            return Some(());
+        }
+
+        // Unmap the large page
+        //
+        Self::unmap_2mb(pd_entry);
+
+        // Map the unmapped physical memory again to 4KB pages.
+        //
+        for i in 0..PAGE_SIZE_ENTRIES {
+            let address = guest_pa.as_usize() + i * BASE_PAGE_SIZE;
+
+            log::trace!("Mapping 4kb page: {:x}", address);
+
+            self.map_4kb(address as _, address as _, AccessType::READ_WRITE_EXCUTE);
+        }
+
+        Some(())
+    }
+
+    fn join_4kb_to_2mb(&mut self, guest_pa: u64) -> Option<()> {
+        log::trace!("Joining 4kb pages into 2mb page: {:x}", guest_pa);
+
+        let guest_pa = VAddr::from(guest_pa);
+
+        let pdpt_index = pdpt_index(guest_pa);
+        let pd_index = pd_index(guest_pa);
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+
+        if pd_entry.is_page() {
+            log::warn!(
+                "Tried to join a large page: {:x}. Only page directories can be joined.",
+                guest_pa
+            );
+            return Some(());
+        }
+
+        // Unmap the page directory
+        //
+        Self::unmap_4kb(pd_entry);
+
+        // Map the unmapped physical memory again to a 2MB large page.
+        //
+        log::trace!("Mapping 2mb page: {:x}", guest_pa);
+        self.map_2mb(
+            guest_pa.as_u64(),
+            guest_pa.as_u64(),
+            AccessType::READ_WRITE_EXCUTE,
+        );
+
+        Some(())
     }
 
     fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
@@ -198,8 +246,6 @@ impl NestedPageTable {
         let pml4_entry = &mut self.pml4[pml4_index];
 
         if !pml4_entry.is_present() {
-            // log::info!("Creating new PML4 entry. pml4_index: {}", pml4_index);
-
             *pml4_entry = PML4Entry::new(
                 physical_address(self.pdp_entries.as_ptr() as _),
                 PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
@@ -212,8 +258,6 @@ impl NestedPageTable {
         let pdpt_entry = &mut self.pdp_entries[pdpt_index];
 
         if !pdpt_entry.is_present() {
-            // log::info!("Creating new PDPT entry: pdp_index: {}", pdpt_index);
-
             let pa = physical_address(self.pd_entries[pdpt_index].as_ptr() as _);
             *pdpt_entry = PDPTEntry::new(
                 pa,
@@ -227,35 +271,9 @@ impl NestedPageTable {
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
 
         if !pd_entry.is_present() {
-            // log::info!(
-            //     "Creating new PD entry: pd_index: {}, guest_pa: {:x}",
-            //     pd_index,
-            //     guest_pa
-            // );
-
-            // In 2MB pages, the PDE contains the 20 bit offset to the physical address. Instead of
-            // using `pt_index` which returns the last 12 bits, we need to calculate the offset ourselves.
+            // We already have the page frame number of the physical address, so we don't need
+            // to calculate it on our own. Just pass it to the page directory entry.
             //
-            // See `5.3.4 2-Mbyte Page Translation` for more information.
-            //
-            let mask = (1 << 20) - 1; // 0xfffff = 0b11111111111111111111
-            let page_offset = host_pa.as_u64() & mask;
-
-            // TODO: Does that even work? We use host_pa for the other addresses but here we use the
-            //       physical address? What if guest_pa is in pdpt[3] and host_pa is in pdpt[4]?
-            //
-            // I guess they have to be just right next to each other so that we can choose the correct page.
-            //
-
-            // TODO: Why do we need to do this?
-            let pfn = page_offset << 21 & PFN_MASK;
-
-            // We actually have to set the actual physical address here. NO OFFSET.
-            // TODO: Verify
-            // OR, maybe we have to set the PFN to the Physical address. (MORE LIKELY)
-
-            let pfn = host_pa >> BASE_PAGE_SHIFT;
-
             *pd_entry = PDEntry::new(
                 PAddr::from(host_pa.as_u64()),
                 PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::PS]),
@@ -263,17 +281,172 @@ impl NestedPageTable {
         }
     }
 
+    // TODO: Make it more granular and merge duplicated code
+    fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+        // TODO: Use access_type
+        let _ = access_type;
+
+        let guest_pa = VAddr::from(guest_pa);
+        let host_pa = VAddr::from(host_pa);
+
+        // PML4 (512 GB)
+        //
+        let pml4_index = pml4_index(guest_pa);
+        let pml4_entry = &mut self.pml4[pml4_index];
+
+        if !pml4_entry.is_present() {
+            *pml4_entry = PML4Entry::new(
+                physical_address(self.pdp_entries.as_ptr() as _),
+                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
+            );
+        }
+
+        // PDPT (1 GB)
+        //
+        let pdpt_index = pdpt_index(guest_pa);
+        let pdpt_entry = &mut self.pdp_entries[pdpt_index];
+
+        if !pdpt_entry.is_present() {
+            let pa = physical_address(self.pd_entries[pdpt_index].as_ptr() as _);
+            *pdpt_entry = PDPTEntry::new(
+                pa,
+                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]),
+            );
+        }
+
+        // PD (2 MB)
+        //
+        let pd_index = pd_index(guest_pa);
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+
+        if !pd_entry.is_present() {
+            let pa = physical_address(self.pt_entries[pdpt_index][pd_index].as_ptr() as _);
+            *pd_entry = PDEntry::new(
+                PAddr::from(pa),
+                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US]),
+            );
+        }
+
+        // PT (4 KB)
+        //
+        let pt_index = pt_index(guest_pa);
+        let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
+
+        if !pt_entry.is_present() {
+            // We already have the page frame number of the physical address, so we don't need
+            // to calculate it on our own. Just pass it to the page table entry.
+            //
+            *pt_entry = PTEntry::new(
+                PAddr::from(host_pa.as_u64()),
+                PTFlags::from_iter([PTFlags::P, PTFlags::RW, PTFlags::US]),
+            );
+        }
+    }
+
+    fn unmap_2mb(entry: &mut PDEntry) {
+        if !entry.is_present() {
+            return;
+        }
+
+        // TODO: Do we need to iterate over the subtables?
+
+        // Clear the flags
+        //
+        *entry = PDEntry(entry.address().as_u64());
+    }
+
+    fn unmap_4kb(entry: &mut PDEntry) {
+        // TODO: We should probably either make this generic or recode the logic to also clear 4kb entries
+        Self::unmap_2mb(entry);
+    }
+
     fn change_permissions(&mut self, _permission: ()) {
         // TODO: Iterate over all or only pml4?
     }
 
+    /// Builds the nested page table to cover for the entire physical memory address space.
+    ///
+    #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
+    pub fn system() -> Option<AllocatedMemory<Self>> {
+        let desc = PhysicalMemoryDescriptor::new()?;
+        let mut npt =
+            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+
+        // NPT entries based on the physical memory ranges.
+        //
+        for range in desc.ranges {
+            let base_address = range.base_page() * LARGE_PAGE_SIZE as u64;
+
+            log::info!(
+                "Mapping base_address: {:x}, page_count: {}",
+                base_address,
+                range.page_count()
+            );
+            for page_index in 0..range.page_count() {
+                let physical_address = base_address + page_index * LARGE_PAGE_SIZE as u64;
+
+                // log::info!("Mapping 2mb physical_address: {:x}", physical_address);
+
+                npt.map_2mb(
+                    physical_address,
+                    physical_address,
+                    AccessType::READ_WRITE_EXCUTE,
+                );
+            }
+        }
+
+        // TODO: Do we need APIC base?
+        // Map
+        //
+        let apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
+        // Bits 12:35
+        let apic_base = apic_base & 0xFFFFF000; // TODO: Trust copilot or do it myself?
+        let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
+
+        npt.map_2mb(apic_base, apic_base, AccessType::READ_WRITE_EXCUTE);
+
+        // Compute max PDPT index based on last descriptor entry that describes the highest pa.
+        //
+        let last_range = desc.ranges.last()?;
+
+        let base_address = last_range.base_page() * LARGE_PAGE_SIZE as u64;
+        let end = base_address + last_range.page_count() * LARGE_PAGE_SIZE as u64;
+
+        const _1GB: u64 = 1024 * 1024 * 1024;
+        macro round_to_size($length: expr, $alignment: expr) {
+            ($length + $alignment - 1) & !($alignment - 1)
+        }
+
+        let max_pdp_index = round_to_size!(end, _1GB) / _1GB;
+        log::info!("Max PDPT index: {}", max_pdp_index);
+        log::info!("End: {:x}", end);
+
+        Some(npt)
+    }
+
+    // TODO: Not yet working. Fix it.
+    pub fn last_pdp_index(&self) -> Option<u64> {
+        let desc = PhysicalMemoryDescriptor::new()?;
+
+        let last_range = desc.ranges.last()?;
+        let base_address = last_range.base_page() * LARGE_PAGE_SIZE as u64;
+        let end = base_address + last_range.page_count() * LARGE_PAGE_SIZE as u64;
+
+        macro round_to_size($length: expr, $alignment: expr) {
+            ($length + $alignment - 1) & !($alignment - 1)
+        }
+
+        let max_pdp_index = round_to_size!(end, _1GB) / _1GB;
+        log::info!("Max PDPT index: {}", max_pdp_index);
+        log::info!("End: {:x}", end);
+
+        Some(max_pdp_index)
+    }
+
     // TODO:
-    // - Implement system()
-    // - Split 2mb into 4kb pages
     // - Map 4kb guest physical address to 4kb host physical address (hooked) and vice versa
     // - Change permissions of other pages to RW and vice versa
     //    - Are there optimizations? Only borders/outside memory?
 
     // IMPORTANT: Can we cache it somehow?
-    // TODO: Can we unroll the loop somehow? Probably quite big for 512 * 512 (262144 = 0x40000) -> Takes probably stil quite a long time
 }
