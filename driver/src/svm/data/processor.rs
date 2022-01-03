@@ -8,6 +8,7 @@ use crate::svm::paging::PAGE_SIZE;
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2, NpEnable};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
 use core::arch::asm;
+use core::ptr::NonNull;
 use nt::include::PVOID;
 
 use x86::msr::wrmsr;
@@ -25,8 +26,8 @@ pub struct HostStackLayout {
     pub guest_vmcb_pa: u64,
     pub host_vmcb_pa: u64,
 
-    pub self_data: *mut ProcessorData,
-    pub shared_data: *mut SharedData,
+    pub self_data: NonNull<ProcessorData>,
+    pub shared_data: NonNull<SharedData>,
 
     /// To keep HostRsp 16 bytes aligned
     pub padding_1: u64,
@@ -162,8 +163,9 @@ impl ProcessorData {
         //
         log::info!("Setting up the stack layout");
         self.host_stack_layout.reserved_1 = u64::MAX;
-        self.host_stack_layout.shared_data = shared_data as *mut _;
-        self.host_stack_layout.self_data = self as *mut _ as _;
+        self.host_stack_layout.shared_data =
+            unsafe { NonNull::new_unchecked(shared_data as *mut _) };
+        self.host_stack_layout.self_data = unsafe { NonNull::new_unchecked(self as *mut _) };
         self.host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
         self.host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
     }
