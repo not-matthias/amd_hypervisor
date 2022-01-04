@@ -11,7 +11,6 @@
 #![feature(const_ptr_as_ref)]
 
 use crate::debug::dbg_break;
-
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
 use crate::svm::Processors;
@@ -97,6 +96,20 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     dbg_break!();
 
+    // Print physical memory pages
+    //
+
+    let Some(desc) = PhysicalMemoryDescriptor::new() else {
+        log::error!("Failed to create physical memory descriptor");
+        return STATUS_UNSUCCESSFUL;
+    };
+
+    log::info!("Physical memory descriptors: {:x?}", desc);
+    log::info!("Found {:#x?} pages", desc.page_count());
+    log::info!("Found {}gb of physical memory", desc.total_size_in_gb());
+
+    // Virtualize the system
+    //
     cfg_if::cfg_if! {
         if #[cfg(feature = "mmap")] {
             let _ = driver;

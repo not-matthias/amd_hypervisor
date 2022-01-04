@@ -2,15 +2,14 @@ extern crate alloc;
 
 use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::{AccessType, PFN_MASK, _1GB, _2MB, _512GB};
+use crate::svm::paging::{AccessType, PFN_MASK, _2MB, _512GB};
 use crate::PhysicalMemoryDescriptor;
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
-    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SIZE, LARGE_PAGE_SIZE,
+    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SIZE,
     PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
 };
-use x86::msr::{rdmsr, IA32_APIC_BASE};
 
 /// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
@@ -128,6 +127,8 @@ impl NestedPageTable {
             npt.map_2mb(pa, pa, AccessType::ReadWriteExecute);
         }
 
+        npt.last_pdp_index();
+
         Some(npt)
     }
 
@@ -141,6 +142,31 @@ impl NestedPageTable {
         for pa in (0.._512GB).step_by(BASE_PAGE_SIZE) {
             npt.map_4kb(pa, pa, AccessType::ReadWriteExecute);
         }
+
+        Some(npt)
+    }
+
+    /// Builds the nested page table to cover for the entire physical memory address space.
+    #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
+    pub fn system() -> Option<AllocatedMemory<Self>> {
+        let desc = PhysicalMemoryDescriptor::new()?;
+        let mut npt =
+            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+
+        // FIXME: For some reason this still doesn't work.
+        for pa in (0..desc.total_size()).step_by(_2MB) {
+            npt.map_2mb(pa as u64, pa as u64, AccessType::ReadWriteExecute);
+        }
+
+        // TODO: Do we need APIC base?
+        // Map
+        //
+        // let apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
+        // // Bits 12:35
+        // let apic_base = apic_base & 0xFFFFF000; // TODO: Trust copilot or do it myself?
+        // let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
+        //
+        // npt.map_2mb(apic_base, apic_base, AccessType::ReadWriteExecute);
 
         Some(npt)
     }
@@ -346,12 +372,14 @@ impl NestedPageTable {
         Self::unmap_2mb(entry);
     }
 
-    pub fn change_all_permissions(&mut self, permission: AccessType) {
-        // TODO: Only iterate up to max_pdpt_index
+    /// Changes the permissions for all pdp entries.
+    pub fn change_all_permissions(&mut self, permission: AccessType) -> Option<()> {
+        // TODO: Do we need to change the permissions of PT?
 
-        // Set the permission for all the PDP entries.
-        //
-        for pdp_entry in self.pdp_entries.iter_mut() {
+        let last_pdp_index = self.last_pdp_index()?;
+        for i in 0..=last_pdp_index {
+            let pdp_entry = &mut self.pdp_entries[i];
+
             let mut flags = pdp_entry.flags();
             match permission {
                 AccessType::ReadWrite => {
@@ -366,6 +394,8 @@ impl NestedPageTable {
 
             *pdp_entry = PDPTEntry::new(pdp_entry.address(), flags);
         }
+
+        Some(())
     }
 
     /// Changes the permission of a single page.
@@ -382,6 +412,8 @@ impl NestedPageTable {
         let pdpt_index = pdpt_index(guest_pa);
         let pd_index = pd_index(guest_pa);
         let pt_index = pt_index(guest_pa);
+
+        log::info!("PDPT index: {:#x}", pdpt_index);
 
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
         if pd_entry.is_page() {
@@ -409,83 +441,13 @@ impl NestedPageTable {
         *pt_entry = PTEntry::new(pt_entry.address(), flags);
     }
 
-    /// Builds the nested page table to cover for the entire physical memory address space.
-    ///
-    #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
-    pub fn system() -> Option<AllocatedMemory<Self>> {
-        let desc = PhysicalMemoryDescriptor::new()?;
-        let mut npt =
-            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
-
-        // NPT entries based on the physical memory ranges.
-        //
-        for range in desc.ranges {
-            let base_address = range.base_page() * LARGE_PAGE_SIZE as u64;
-
-            log::info!(
-                "Mapping base_address: {:x}, page_count: {}",
-                base_address,
-                range.page_count()
-            );
-            for page_index in 0..range.page_count() {
-                let physical_address = base_address + page_index * LARGE_PAGE_SIZE as u64;
-
-                // log::info!("Mapping 2mb physical_address: {:x}", physical_address);
-
-                npt.map_2mb(
-                    physical_address,
-                    physical_address,
-                    AccessType::ReadWriteExecute,
-                );
-            }
-        }
-
-        // TODO: Do we need APIC base?
-        // Map
-        //
-        let apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
-        // Bits 12:35
-        let apic_base = apic_base & 0xFFFFF000; // TODO: Trust copilot or do it myself?
-        let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
-
-        npt.map_2mb(apic_base, apic_base, AccessType::ReadWriteExecute);
-
-        // Compute max PDPT index based on last descriptor entry that describes the highest pa.
-        //
-        let last_range = desc.ranges.last()?;
-
-        let base_address = last_range.base_page() * LARGE_PAGE_SIZE as u64;
-        let end = base_address + last_range.page_count() * LARGE_PAGE_SIZE as u64;
-
-        const _1GB: u64 = 1024 * 1024 * 1024;
-        macro round_to_size($length: expr, $alignment: expr) {
-            ($length + $alignment - 1) & !($alignment - 1)
-        }
-
-        let max_pdp_index = round_to_size!(end, _1GB) / _1GB;
-        log::info!("Max PDPT index: {}", max_pdp_index);
-        log::info!("End: {:x}", end);
-
-        Some(npt)
-    }
-
     // TODO: Not yet working. Fix it.
-    pub fn last_pdp_index(&self) -> Option<u64> {
+    pub fn last_pdp_index(&self) -> Option<usize> {
         let desc = PhysicalMemoryDescriptor::new()?;
 
-        let last_range = desc.ranges.last()?;
-        let base_address = last_range.base_page() * LARGE_PAGE_SIZE as u64;
-        let end = base_address + last_range.page_count() * LARGE_PAGE_SIZE as u64;
-
-        macro round_to_size($length: expr, $alignment: expr) {
-            ($length + $alignment - 1) & !($alignment - 1)
-        }
-
-        let max_pdp_index = round_to_size!(end, _1GB) / _1GB;
-        log::info!("Max PDPT index: {}", max_pdp_index);
-        log::info!("End: {:x}", end);
-
-        Some(max_pdp_index)
+        // TODO: I'm not 100% confident that the last pdp index is correct. Do we have to round up?
+        //
+        Some(desc.total_size_in_gb() + 1)
     }
 
     // TODO:

@@ -1,6 +1,30 @@
-use crate::nt::include::{MmGetPhysicalMemoryRanges, PhysicalMemoryRange};
-use crate::svm::paging::bytes_to_pages;
-use core::fmt::{Debug, Formatter};
+use crate::nt::include::{ExFreePool, MmGetPhysicalMemoryRanges};
+use crate::svm::paging::{bytes_to_pages, _1GB};
+use core::fmt::Debug;
+use tinyvec::ArrayVec;
+use x86::bits32::paging::BASE_PAGE_SIZE;
+use x86::bits64::paging::BASE_PAGE_SHIFT;
+
+/// https://github.com/wbenny/hvpp/blob/84b3f3c241e1eec3ab42f75cad9deef3ad67e6ab/src/hvpp/hvpp/lib/mm/physical_memory_descriptor.h#L22
+///
+/// TODO: Find out why this is the constant we need?
+const MAX_RANGE_COUNT: usize = 32;
+
+#[derive(Debug, Default)]
+pub struct PhysicalMemoryRange {
+    pub base_address: u64,
+    pub number_of_bytes: u64,
+}
+
+impl PhysicalMemoryRange {
+    pub fn base_page(&self) -> u64 {
+        self.base_address >> BASE_PAGE_SHIFT
+    }
+
+    pub fn page_count(&self) -> u64 {
+        bytes_to_pages!(self.number_of_bytes) as u64
+    }
+}
 
 ///
 ///
@@ -15,17 +39,16 @@ use core::fmt::{Debug, Formatter};
 ///
 /// Thanks for @PDBDream
 ///
-pub struct PhysicalMemoryDescriptor<'a> {
-    pub number_of_runs: usize,
-    pub number_of_pages: usize,
-
-    // TODO: SimpleSvmHook stores the base_page and page_count instead of PhysicalMemoryRange
-    pub ranges: &'a [PhysicalMemoryRange],
+#[derive(Debug)]
+pub struct PhysicalMemoryDescriptor {
+    ranges: ArrayVec<[PhysicalMemoryRange; MAX_RANGE_COUNT]>,
+    count: usize,
 }
 
-impl<'a> PhysicalMemoryDescriptor<'a> {
+impl PhysicalMemoryDescriptor {
     pub fn new() -> Option<Self> {
         // See: https://doxygen.reactos.org/d1/d6d/dynamic_8c_source.html#l00073
+        //
         let memory_range = unsafe { MmGetPhysicalMemoryRanges() };
         if memory_range.is_null() {
             log::error!("MmGetPhysicalMemoryRanges() returned null");
@@ -34,59 +57,57 @@ impl<'a> PhysicalMemoryDescriptor<'a> {
 
         // Count the number of pages and runs
         //
-        let mut number_of_runs = 0;
-        let mut number_of_pages = 0;
+        let mut ranges = ArrayVec::new();
+
+        let mut count = 0;
         loop {
-            let current = unsafe { memory_range.add(number_of_runs) };
+            let current = unsafe { memory_range.add(count) };
             if current.is_null() {
                 break;
             }
 
-            let base_address = unsafe { (*current).base_address.QuadPart() };
-            let number_of_bytes = unsafe { (*current).number_of_bytes.QuadPart() };
-            if *base_address == 0 && *number_of_bytes == 0 {
+            let base_address = unsafe { *(*current).base_address.QuadPart() as u64 };
+            let number_of_bytes = unsafe { *(*current).number_of_bytes.QuadPart() as u64 };
+            if base_address == 0 && number_of_bytes == 0 {
                 break;
             }
 
-            log::trace!(
-                "PhysicalMemoryDescriptor::new(): base_address={:#x}, number_of_bytes={:#x}",
+            ranges.push(PhysicalMemoryRange {
                 base_address,
-                number_of_bytes
-            );
+                number_of_bytes,
+            });
 
-            number_of_pages += bytes_to_pages!(number_of_bytes);
-            number_of_runs += 1;
+            count += 1;
         }
 
-        if number_of_runs == 0 {
+        unsafe { ExFreePool(memory_range as *mut _) };
+
+        if count == 0 {
             log::error!("PhysicalMemoryDescriptor::new(): no memory ranges found");
             return None;
         } else {
-            Some(Self {
-                number_of_runs,
-                number_of_pages,
-                ranges: unsafe { core::slice::from_raw_parts(memory_range, number_of_runs) },
-            })
+            Some(Self { ranges, count })
         }
     }
-}
 
-impl Debug for PhysicalMemoryDescriptor<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        log::info!("PhysicalMemoryDescriptor:");
-        log::info!("  number_of_runs={}", self.number_of_runs);
-        log::info!("  number_of_pages={}", self.number_of_pages);
+    pub fn get_ranges(&self) -> &[PhysicalMemoryRange] {
+        &self.ranges[0..self.count]
+    }
 
-        for range in self.ranges {
-            let base_address = unsafe { (*range).base_address.QuadPart() };
-            let number_of_bytes = unsafe { (*range).number_of_bytes.QuadPart() };
+    /// Returns the number of physical memory pages.
+    pub fn page_count(&self) -> usize {
+        self.get_ranges()
+            .iter()
+            .fold(0, |acc, range| acc + bytes_to_pages!(range.number_of_bytes))
+    }
 
-            f.write_fmt(format_args!(
-                "  base_address = {:#x}, number_of_bytes: {:#x}, base_page: {:#x}, page_count: {:#x}\n",
-                base_address, number_of_bytes, range.base_page(), range.page_count()
-            ))?;
-        }
+    /// Returns the total physical memory size in bytes.
+    pub fn total_size(&self) -> usize {
+        self.page_count() * BASE_PAGE_SIZE
+    }
 
-        Ok(())
+    /// Returns the total physical memory size in giga bytes.
+    pub fn total_size_in_gb(&self) -> usize {
+        self.total_size() / _1GB as usize
     }
 }
