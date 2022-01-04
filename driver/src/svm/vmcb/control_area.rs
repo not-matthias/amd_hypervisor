@@ -22,7 +22,7 @@ pub struct ControlArea {
     pub vintr: u64,                          // +0x060
     pub interrupt_shadow: u64,               // +0x068
     pub exit_code: VmExitCode,               // +0x070
-    pub exit_info1: u64,                     // +0x078
+    pub exit_info1: NptExitInfo,             // +0x078
     pub exit_info2: u64,                     // +0x080
     pub exit_int_info: u64,                  // +0x088
     pub np_enable: NpEnable,                 // +0x090
@@ -92,7 +92,6 @@ bitflags! {
         const INTERCEPT_FERR_FREEZE = 1 << 30;
         const INTERCEPT_SHUTDOWN = 1 << 31;
     }
-
 
     pub struct InterceptMisc2: u32 {
         const INTERCEPT_VMRUN = 1 << 0;
@@ -294,5 +293,40 @@ bitflags! {
         const AVIC_NOACCEL = 1026;
         const VMEXIT_VMGEXIT = 1027;
         const VMEXIT_INVALID = u64::MAX;
+    }
+
+    /// See "Nested versus Guest Page Faults, Fault Ordering"
+    pub struct NptExitInfo: u64 {
+        /// Bit 0 (P)—cleared to 0 if the nested page was not present, 1 otherwise
+        const PRESENT           = 1 << 0;
+
+        /// Bit 1 (RW)—set to 1 if the nested page table level access was a write. Note that host table walks for
+        /// guest page tables are always treated as data writes.
+        const RW                = 1 << 1;
+
+        /// Bit 2 (US)—set to 1 if the nested page table level access was a user access. Note that nested page
+        /// table accesses performed by the MMU are treated as user accesses unless there are features
+        /// enabled that override this.
+        const US                = 1 << 2;
+
+        /// Bit 3 (RSV)—set to 1 if reserved bits were set in the corresponding nested page table entry
+        const RSV               = 1 << 3;
+
+        /// Bit 4 (ID)—set to 1 if the nested page table level access was a code read. Note that nested table
+        /// walks for guest page tables are always treated as data writes, even if the access itself is a code read
+        const ID                = 1 << 4;
+
+        /// Bit 6 (SS) - set to 1 if the fault was caused by a shadow stack access.
+        const SS                = 1 << 6;
+
+        /// Bit 32—set to 1 if nested page fault occurred while translating the guest’s final physical address
+        const GUEST_PA                    = 1 << 32;
+
+        /// Bit 33—set to 1 if nested page fault occurred while translating the guest page tables
+        const GUEST_PAGE_TABLES           = 1 << 33;
+
+        /// Bit 37—set to 1 if the page was marked as a supervisor shadow stack page in the leaf node of the
+        /// nested page table and the shadow stack check feature is enabled in VMCB offset 90h.
+        const GUEST_PAGE_TABLES_WITH_SS   = 1 << 37;
     }
 }
