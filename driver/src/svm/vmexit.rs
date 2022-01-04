@@ -1,14 +1,17 @@
 use crate::debug::dbg_break;
-use crate::nt::addresses::physical_address;
+use crate::nt::addresses::{physical_address, PhysicalAddress};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::nt::ptr::Pointer;
 use crate::svm::data::guest::GuestRegisters;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
 use crate::svm::events::EventInjection;
-use crate::svm::vmcb::control_area::VmExitCode;
+use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
 use core::arch::asm;
 
+
+
+use crate::svm::paging::AccessType;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -16,6 +19,7 @@ use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 pub enum ExitType {
     ExitHypervisor,
     IncrementRIP,
+    DoNothing,
 }
 
 pub const CPUID_DEVIRTUALIZE: u64 = 0x41414141;
@@ -79,7 +83,7 @@ pub fn handle_cpuid(_data: &mut ProcessorData, guest_regs: &mut GuestRegisters) 
 
 pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
     let msr = guest_regs.rcx as u32;
-    let write_access = data.guest_vmcb.control_area.exit_info1 != 0;
+    let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
 
     // Prevent IA32_EFER from being modified
     //
@@ -141,7 +145,7 @@ pub fn handle_vmrun(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitTyp
     //
     EventInjection::gp().inject(data);
 
-    ExitType::IncrementRIP
+    ExitType::DoNothing
 }
 
 pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
@@ -151,25 +155,45 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
 
     EventInjection::bp().inject(data);
 
-    ExitType::IncrementRIP
+    ExitType::DoNothing
 }
 
-pub fn handle_nested_page_fault(
-    _data: &mut ProcessorData,
-    _guest_context: &mut GuestRegisters,
-) -> ExitType {
-    let hooked_npt = &_data.host_stack_layout.shared_data.hooked_npt;
+pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
+    let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
-    dbg_break!();
+    // TODO: Could we intercept page reads via RW error code?
+
+    // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault Ordering`
+    //
+    // Nested page faults are entirely a function of the nested page table and VMM processor mode. Nested
+    // faults cause a #VMEXIT(NPF) to the VMM. The faulting guest physical address is saved in the
+    // VMCB's EXITINFO2 field; EXITINFO1 delivers an error code similar to a #PF error code.
+    //
+    let faulting_pa = data.guest_vmcb.control_area.exit_info2;
+    let exit_info = data.guest_vmcb.control_area.exit_info1;
+
+    // Page was not present so we have to map it.
+    //
+    if !exit_info.contains(NptExitInfo::PRESENT) {
+        let faulting_pa = PhysicalAddress::from_pa(faulting_pa)
+            .align_down_to_base_page()
+            .as_u64();
+
+        hooked_npt
+            .npt
+            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
+        return ExitType::IncrementRIP;
+    }
+
+    // TODO: Hide hook from guest
+    //
+    hooked_npt
+        .npt
+        .change_page_permission(faulting_pa, AccessType::ReadWriteExecute);
 
     // TODO:
     // - Make sure there's no way to scan physical memory to find the hook
     //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
-
-    // // Not yet mapped. It's MMIO access.
-    // if (!exit_info.valid) {
-    //     map_4k(guest_pa, guest_pa, rwx);
-    // }
 
     // Apply or revert hooks
     //
@@ -201,7 +225,7 @@ pub fn handle_nested_page_fault(
     //     hide_hook();
     // }
 
-    ExitType::IncrementRIP
+    ExitType::DoNothing
 }
 
 unsafe fn exit_hypervisor(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) {
@@ -294,6 +318,7 @@ unsafe extern "stdcall" fn handle_vmexit(
             data.guest_vmcb.save_area.rax = guest_regs.rax;
             data.guest_vmcb.save_area.rip = data.guest_vmcb.control_area.nrip;
         }
+        ExitType::DoNothing => {}
     }
 
     (exit_type == ExitType::ExitHypervisor) as u8

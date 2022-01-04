@@ -41,7 +41,7 @@ pub struct IrqlChanger {
 }
 
 impl IrqlChanger {
-    pub fn lower_irql(level: u8) -> Self {
+    pub fn lower_irql(_level: u8) -> Self {
         todo!()
     }
 

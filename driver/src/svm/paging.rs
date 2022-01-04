@@ -1,6 +1,6 @@
 use crate::nt::addresses::PhysicalAddress;
 
-use bitflags::bitflags;
+
 use x86::bits64::paging::{PML4Entry, MAXPHYADDR};
 
 pub const _512GB: u64 = 512 * 1024 * 1024 * 1024;
@@ -14,18 +14,10 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const PFN_MASK: u64 = ((1 << MAXPHYADDR) - 1) & !0xfff;
 
-bitflags! {
-    pub struct AccessType: u32 {
-        const NONE = 0b00000000;
-        const READ = 0b00000001;
-        const WRITE = 0b00000010;
-        const EXECUTE = 0b00000100;
-
-        const READ_WRITE = Self::READ.bits | Self::WRITE.bits;
-        const READ_WRITE_EXCUTE = Self::READ.bits | Self::WRITE.bits | Self::EXECUTE.bits;
-
-        const ACCESS_MASK = 0b00000111;
-    }
+#[derive(Debug)]
+pub enum AccessType {
+    ReadWrite,
+    ReadWriteExecute,
 }
 
 pub macro pa_from_pfn(pfn: u64) {

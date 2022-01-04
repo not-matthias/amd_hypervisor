@@ -4,7 +4,6 @@ use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::paging::{AccessType, PFN_MASK, _1GB, _2MB, _512GB};
 use crate::PhysicalMemoryDescriptor;
-use alloc::vec::Vec;
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
@@ -126,7 +125,7 @@ impl NestedPageTable {
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(_2MB) {
-            npt.map_2mb(pa, pa, AccessType::READ_WRITE_EXCUTE);
+            npt.map_2mb(pa, pa, AccessType::ReadWriteExecute);
         }
 
         Some(npt)
@@ -140,7 +139,7 @@ impl NestedPageTable {
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(BASE_PAGE_SIZE) {
-            npt.map_4kb(pa, pa, AccessType::READ_WRITE_EXCUTE);
+            npt.map_4kb(pa, pa, AccessType::ReadWriteExecute);
         }
 
         Some(npt)
@@ -181,7 +180,7 @@ impl NestedPageTable {
 
             log::trace!("Mapping 4kb page: {:x}", address);
 
-            self.map_4kb(address as _, address as _, AccessType::READ_WRITE_EXCUTE);
+            self.map_4kb(address as _, address as _, AccessType::ReadWriteExecute);
         }
 
         Some(())
@@ -214,13 +213,13 @@ impl NestedPageTable {
         self.map_2mb(
             guest_pa.as_u64(),
             guest_pa.as_u64(),
-            AccessType::READ_WRITE_EXCUTE,
+            AccessType::ReadWriteExecute,
         );
 
         Some(())
     }
 
-    fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+    pub fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         // TODO: Use access_type
         let _ = access_type;
 
@@ -269,7 +268,7 @@ impl NestedPageTable {
     }
 
     // TODO: Make it more granular and merge duplicated code
-    fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+    pub fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         // TODO: Use access_type
         let _ = access_type;
 
@@ -347,22 +346,67 @@ impl NestedPageTable {
         Self::unmap_2mb(entry);
     }
 
-    pub fn change_all_permissions(&mut self, _permission: AccessType) {
+    pub fn change_all_permissions(&mut self, permission: AccessType) {
         // TODO: Only iterate up to max_pdpt_index
 
         // Set the permission for all the PDP entries.
         //
         for pdp_entry in self.pdp_entries.iter_mut() {
-            pdp_entry.0 |= PDPTFlags::XD.bits();
+            let mut flags = pdp_entry.flags();
+            match permission {
+                AccessType::ReadWrite => {
+                    flags.insert(PDPTFlags::RW);
+                    flags.insert(PDPTFlags::XD);
+                }
+                AccessType::ReadWriteExecute => {
+                    flags.insert(PDPTFlags::RW);
+                    flags.remove(PDPTFlags::XD);
+                }
+            }
+
+            *pdp_entry = PDPTEntry::new(pdp_entry.address(), flags);
         }
     }
 
     /// Changes the permission of a single page.
     ///
-    pub fn change_page_permission(&mut self, _guest_pa: u64, _permission: AccessType) {
-        //
-        //
-        // TODO: Implement this
+    pub fn change_page_permission(&mut self, guest_pa: u64, permission: AccessType) {
+        log::info!(
+            "Changing permission of guest page {:#x} to {:?}",
+            guest_pa,
+            permission
+        );
+
+        let guest_pa = VAddr::from(guest_pa);
+
+        let pdpt_index = pdpt_index(guest_pa);
+        let pd_index = pd_index(guest_pa);
+        let pt_index = pt_index(guest_pa);
+
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+        if pd_entry.is_page() {
+            log::info!("Changing the permission of a 2mb page is currently not supported.");
+            return;
+        }
+
+        let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
+        assert!(pt_entry.is_present());
+
+        let mut flags = pt_entry.flags();
+        log::info!("Current flags: {:?}", flags);
+        match permission {
+            AccessType::ReadWrite => {
+                flags.insert(PTFlags::RW);
+                flags.insert(PTFlags::XD);
+            }
+            AccessType::ReadWriteExecute => {
+                flags.insert(PTFlags::RW);
+                flags.remove(PTFlags::XD);
+            }
+        };
+        log::info!("New flags: {:?}", flags);
+
+        *pt_entry = PTEntry::new(pt_entry.address(), flags);
     }
 
     /// Builds the nested page table to cover for the entire physical memory address space.
@@ -391,7 +435,7 @@ impl NestedPageTable {
                 npt.map_2mb(
                     physical_address,
                     physical_address,
-                    AccessType::READ_WRITE_EXCUTE,
+                    AccessType::ReadWriteExecute,
                 );
             }
         }
@@ -404,7 +448,7 @@ impl NestedPageTable {
         let apic_base = apic_base & 0xFFFFF000; // TODO: Trust copilot or do it myself?
         let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
 
-        npt.map_2mb(apic_base, apic_base, AccessType::READ_WRITE_EXCUTE);
+        npt.map_2mb(apic_base, apic_base, AccessType::ReadWriteExecute);
 
         // Compute max PDPT index based on last descriptor entry that describes the highest pa.
         //

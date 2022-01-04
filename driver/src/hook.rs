@@ -62,9 +62,12 @@ impl Hook {
         let address = get_system_routine_address(name)? as u64;
         log::info!("Found address of {}: {:#x}", &name, address);
 
+        let physical_address = PhysicalAddress::from_va(address);
+        log::info!("Physical address: {:#x}", physical_address.as_u64());
+
         Some(Self {
             address,
-            physical_address: PhysicalAddress::from_va(address),
+            physical_address,
             handler,
             page: Self::copy_page(address)?,
         })
@@ -108,10 +111,12 @@ impl HookedNpt {
         // Split 2mb page into 4kb pages, and set the hooked page to RW
         //
         for hook in self.hooks.iter() {
+            let large_page_base = hook.physical_address.align_down_to_large_page().as_u64();
+            let base_page_base = hook.physical_address.align_down_to_base_page().as_u64();
+
+            self.npt.split_2mb_to_4kb(large_page_base)?;
             self.npt
-                .split_2mb_to_4kb(hook.physical_address.aligned_pa())?;
-            self.npt
-                .change_page_permission(hook.physical_address.aligned_pa(), AccessType::READ_WRITE);
+                .change_page_permission(base_page_base, AccessType::ReadWrite);
         }
 
         Some(())
