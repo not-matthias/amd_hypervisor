@@ -7,9 +7,10 @@ use crate::PhysicalMemoryDescriptor;
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
-    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SIZE,
-    PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
+    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT,
+    PML4, PT,
 };
+
 
 /// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
@@ -149,7 +150,7 @@ impl NestedPageTable {
     /// Builds the nested page table to cover for the entire physical memory address space.
     #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
     pub fn system() -> Option<AllocatedMemory<Self>> {
-        let desc = PhysicalMemoryDescriptor::new()?;
+        let desc = PhysicalMemoryDescriptor::new();
         let mut npt =
             AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
 
@@ -376,29 +377,21 @@ impl NestedPageTable {
     pub fn change_all_permissions(&mut self, permission: AccessType) -> Option<()> {
         // TODO: Do we need to change the permissions of PT?
 
-        let last_pdp_index = self.last_pdp_index()?;
-        for i in 0..=last_pdp_index {
+        for i in 0..=self.last_pdp_index() {
             let pdp_entry = &mut self.pdp_entries[i];
 
-            let mut flags = pdp_entry.flags();
-            match permission {
-                AccessType::ReadWrite => {
-                    flags.insert(PDPTFlags::RW);
-                    flags.insert(PDPTFlags::XD);
-                }
-                AccessType::ReadWriteExecute => {
-                    flags.insert(PDPTFlags::RW);
-                    flags.remove(PDPTFlags::XD);
-                }
-            }
+            let flags = permission.get_1gb(pdp_entry.flags());
+            let entry = PDPTEntry::new(pdp_entry.address(), flags);
 
-            *pdp_entry = PDPTEntry::new(pdp_entry.address(), flags);
+            *pdp_entry = entry;
         }
+
+        // TODO: Make subtables executable when setting RWX?
 
         Some(())
     }
 
-    /// Changes the permission of a single page.
+    /// Changes the permission of a single 4kb page.
     ///
     pub fn change_page_permission(&mut self, guest_pa: u64, permission: AccessType) {
         log::info!(
@@ -413,41 +406,121 @@ impl NestedPageTable {
         let pd_index = pd_index(guest_pa);
         let pt_index = pt_index(guest_pa);
 
-        log::info!("PDPT index: {:#x}", pdpt_index);
-
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
         if pd_entry.is_page() {
-            log::info!("Changing the permission of a 2mb page is currently not supported.");
-            return;
+            log::info!("Changing the permissions of a 2mb page");
+
+            let flags = permission.get_2mb(pd_entry.flags());
+            let entry = PDEntry::new(pd_entry.address(), flags);
+
+            *pd_entry = entry;
+        } else {
+            log::info!("Changing the permissions of a 4kb page");
+
+            let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
+            assert!(pt_entry.is_present());
+
+            let flags = permission.get_4kb(pt_entry.flags());
+            let entry = PTEntry::new(pd_entry.address(), flags);
+
+            *pt_entry = entry;
+        }
+    }
+
+    pub fn change_permission_single_page(&mut self, guest_pa: u64, page_permission: AccessType) {
+        // TODO: This currently allows only a single hook to be enabled.
+
+        // We have to specify the permission of the other pages. If the target page should be
+        // RW, then the other pages have to be RWX. If the target page should be RWX, then the
+        // other pages have to be RW.
+        //
+        let other_permission = if page_permission == AccessType::ReadWrite {
+            AccessType::ReadWriteExecute
+        } else {
+            AccessType::ReadWrite
+        };
+        let should_be_executable = other_permission == AccessType::ReadWriteExecute;
+
+        let guest_pa = VAddr::from(guest_pa);
+        let pdpt_index = pdpt_index(guest_pa);
+        let pd_index = pd_index(guest_pa);
+        let pt_index = pt_index(guest_pa);
+
+        // Change the permission of all pdp entries (1GB) to the opposite before trying to set
+        // the actual page permission of the target page.
+        //
+        for i in 0..=self.last_pdp_index() {
+            let pdp_entry = &mut self.pdp_entries[i];
+
+            if pdp_entry.is_instruction_fetching_disabled() && !should_be_executable {
+                continue;
+            }
+
+            let flags = other_permission.get_1gb(pdp_entry.flags());
+            let entry = PDPTEntry::new(pdp_entry.address(), flags);
+
+            *pdp_entry = entry;
         }
 
+        // PD (2MB)
+        //
+        for i in 0..512 {
+            let pd_entry = &mut self.pd_entries[pdpt_index][i];
+
+            if pd_entry.is_instruction_fetching_disabled() && !should_be_executable {
+                continue;
+            }
+
+            let flags = other_permission.get_2mb(pd_entry.flags());
+            let entry = PDEntry::new(pd_entry.address(), flags);
+
+            *pd_entry = entry;
+        }
+
+        // PT (4KB)
+        //
+        for i in 0..512 {
+            let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][i];
+
+            if pt_entry.is_instruction_fetching_disabled() && !should_be_executable {
+                continue;
+            }
+
+            let flags = other_permission.get_4kb(pt_entry.flags());
+            let entry = PTEntry::new(pt_entry.address(), flags);
+
+            *pt_entry = entry;
+        }
+
+        // Every page has been set to the other permission, so we have to set correct permission
+        // for the target page now. his has to be done for the PDP, PD and PT.
+        //
+        let pdp_entry = &mut self.pdp_entries[pdpt_index];
+        *pdp_entry = PDPTEntry::new(
+            pdp_entry.address(),
+            page_permission.get_1gb(pdp_entry.flags()),
+        );
+
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+        *pd_entry = PDEntry::new(
+            pd_entry.address(),
+            page_permission.get_2mb(pd_entry.flags()),
+        );
+
         let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
-        assert!(pt_entry.is_present());
-
-        let mut flags = pt_entry.flags();
-        log::info!("Current flags: {:?}", flags);
-        match permission {
-            AccessType::ReadWrite => {
-                flags.insert(PTFlags::RW);
-                flags.insert(PTFlags::XD);
-            }
-            AccessType::ReadWriteExecute => {
-                flags.insert(PTFlags::RW);
-                flags.remove(PTFlags::XD);
-            }
-        };
-        log::info!("New flags: {:?}", flags);
-
-        *pt_entry = PTEntry::new(pt_entry.address(), flags);
+        *pt_entry = PTEntry::new(
+            pt_entry.address(),
+            page_permission.get_4kb(pt_entry.flags()),
+        );
     }
 
     // TODO: Not yet working. Fix it.
-    pub fn last_pdp_index(&self) -> Option<usize> {
-        let desc = PhysicalMemoryDescriptor::new()?;
+    pub fn last_pdp_index(&self) -> usize {
+        let desc = PhysicalMemoryDescriptor::new();
 
         // TODO: I'm not 100% confident that the last pdp index is correct. Do we have to round up?
         //
-        Some(desc.total_size_in_gb() + 1)
+        desc.total_size_in_gb() + 1
     }
 
     // TODO:

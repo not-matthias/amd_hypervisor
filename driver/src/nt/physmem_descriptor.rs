@@ -46,13 +46,13 @@ pub struct PhysicalMemoryDescriptor {
 }
 
 impl PhysicalMemoryDescriptor {
-    pub fn new() -> Option<Self> {
+    pub fn new() -> Self {
         // See: https://doxygen.reactos.org/d1/d6d/dynamic_8c_source.html#l00073
         //
         let memory_range = unsafe { MmGetPhysicalMemoryRanges() };
         if memory_range.is_null() {
             log::error!("MmGetPhysicalMemoryRanges() returned null");
-            return None;
+            unreachable!()
         }
 
         // Count the number of pages and runs
@@ -84,10 +84,10 @@ impl PhysicalMemoryDescriptor {
 
         if count == 0 {
             log::error!("PhysicalMemoryDescriptor::new(): no memory ranges found");
-            return None;
-        } else {
-            Some(Self { ranges, count })
+            unreachable!()
         }
+
+        Self { ranges, count }
     }
 
     pub fn get_ranges(&self) -> &[PhysicalMemoryRange] {

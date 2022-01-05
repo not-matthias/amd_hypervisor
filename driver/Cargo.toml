@@ -35,6 +35,7 @@ winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/
 
 [profile.release]
 lto = "thin"    # IMPORTANT: "fat" doesn't work and will result in an access violation
-debug = true
+debug = false
+#debug = true
 panic = "abort"
 incremental = true

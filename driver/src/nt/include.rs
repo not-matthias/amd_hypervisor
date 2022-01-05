@@ -3,8 +3,6 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
-
-
 use core::mem::MaybeUninit;
 use nt::include::HANDLE;
 use winapi::shared::ntdef::LARGE_INTEGER;
@@ -20,7 +18,6 @@ use winapi::{
     },
     um::winnt::PCONTEXT,
 };
-
 
 /// `VOID KSTART_ROUTINE (_In_ PVOID StartContext);`
 pub type KSTART_ROUTINE = extern "system" fn(*mut u64);

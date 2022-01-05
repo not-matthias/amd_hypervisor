@@ -9,8 +9,6 @@ use crate::svm::events::EventInjection;
 use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
 use core::arch::asm;
 
-
-
 use crate::svm::paging::AccessType;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
@@ -161,6 +159,16 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
+    // TODO: Can we check if the guest called the hook function?
+    //          If not, what should we do?
+    //          If yes, we can parse the RET address.
+    //
+    //
+
+    // TODO:
+    // - Make sure there's no way to scan physical memory to find the hook
+    //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
+
     // TODO: Could we intercept page reads via RW error code?
 
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault Ordering`
@@ -185,15 +193,36 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
         return ExitType::IncrementRIP;
     }
 
-    // TODO: Hide hook from guest
+    // Check if there exists a hook for the faulting page.
+    // - #1 - Yes: Guest tried to execute a function inside the hooked page.
+    // - #2 - No: Guest tried to execute code outside the hooked page (our hook has been exited).
     //
-    hooked_npt
-        .npt
-        .change_page_permission(faulting_pa, AccessType::ReadWriteExecute);
+    // For both these situations, we have to do something different:
+    // - #1 - Change permission of hook page to RWX and of other pages to RW.
+    // - #2 - Change permission of hook page to RW and of other pages to RWX.
+    //
 
-    // TODO:
-    // - Make sure there's no way to scan physical memory to find the hook
-    //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
+    // TODO: Make a diagram of this.
+
+    if hooked_npt.exists_hook(faulting_pa) {
+        // TODO: We don't check if we are already inside a hooked page.
+
+        hooked_npt
+            .npt
+            .change_page_permission(faulting_pa, AccessType::ReadWriteExecute);
+    } else {
+        // TODO: Change permission of other pages to RW?
+        // TODO: This changes the permission of the faulting pa and not of the hook!!!!!
+
+        // Hide all other hooks
+        // TODO: Fix this
+        // for hook in hooked_npt.hooks.iter() {
+        //     hooked_npt.npt.change_page_permission(
+        //         hook.physical_address.align_down_to_base_page().as_u64(),
+        //         AccessType::ReadWrite,
+        //     );
+        // }
+    }
 
     // Apply or revert hooks
     //

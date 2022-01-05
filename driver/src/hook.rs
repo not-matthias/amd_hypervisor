@@ -17,13 +17,15 @@ use x86_64::instructions::interrupts::without_interrupts;
 
 pub struct Hook {
     /// The address of the original function.    
-    address: u64,
+    pub address: u64,
 
     /// The physical address of the original function.
-    physical_address: PhysicalAddress,
-    handler: *const (),
+    pub physical_address: PhysicalAddress,
 
-    page: AllocatedMemory<u8>,
+    // TODO: Unused for now
+    pub handler: *const (),
+
+    pub page: AllocatedMemory<u8>,
 }
 
 impl Hook {
@@ -78,7 +80,7 @@ pub struct HookedNpt {
     pub npt: AllocatedMemory<NestedPageTable>,
 
     // TODO: Can we remove these useless allocations?
-    hooks: Vec<Hook>,
+    pub hooks: Vec<Hook>,
 }
 
 impl HookedNpt {
@@ -126,8 +128,19 @@ impl HookedNpt {
         // TODO: Implement this
     }
 
-    pub fn visible() -> bool {
-        // TODO: Check if the first byte at the address is 0xcc
+    pub fn exists_hook(&self, faulting_pa: u64) -> bool {
+        // TODO: Assumes that both addresses are 4kb pages.
+
+        let faulting_pa = PhysicalAddress::from_pa(faulting_pa);
+        let faulting_pa = faulting_pa.align_down_to_base_page();
+
+        for hook in self.hooks.iter() {
+            let hook_pa = hook.physical_address.align_down_to_base_page();
+
+            if hook_pa == faulting_pa {
+                return true;
+            }
+        }
 
         false
     }

@@ -1,7 +1,6 @@
 use crate::nt::addresses::PhysicalAddress;
 
-
-use x86::bits64::paging::{PML4Entry, MAXPHYADDR};
+use x86::bits64::paging::{PDFlags, PDPTFlags, PML4Entry, PTFlags, MAXPHYADDR};
 
 pub const _512GB: u64 = 512 * 1024 * 1024 * 1024;
 pub const _1GB: u64 = 1024 * 1024 * 1024;
@@ -14,10 +13,57 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const PFN_MASK: u64 = ((1 << MAXPHYADDR) - 1) & !0xfff;
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AccessType {
     ReadWrite,
     ReadWriteExecute,
+}
+
+impl AccessType {
+    pub fn get_1gb(&self, mut flags: PDPTFlags) -> PDPTFlags {
+        match self {
+            AccessType::ReadWrite => {
+                flags.insert(PDPTFlags::RW);
+                flags.insert(PDPTFlags::XD);
+            }
+            AccessType::ReadWriteExecute => {
+                flags.insert(PDPTFlags::RW);
+                flags.remove(PDPTFlags::XD);
+            }
+        }
+
+        flags
+    }
+
+    pub fn get_2mb(&self, mut flags: PDFlags) -> PDFlags {
+        match self {
+            AccessType::ReadWrite => {
+                flags.insert(PDFlags::RW);
+                flags.insert(PDFlags::XD);
+            }
+            AccessType::ReadWriteExecute => {
+                flags.insert(PDFlags::RW);
+                flags.remove(PDFlags::XD);
+            }
+        }
+
+        flags
+    }
+
+    pub fn get_4kb(&self, mut flags: PTFlags) -> PTFlags {
+        match self {
+            AccessType::ReadWrite => {
+                flags.insert(PTFlags::RW);
+                flags.insert(PTFlags::XD);
+            }
+            AccessType::ReadWriteExecute => {
+                flags.insert(PTFlags::RW);
+                flags.remove(PTFlags::XD);
+            }
+        }
+
+        flags
+    }
 }
 
 pub macro pa_from_pfn(pfn: u64) {
