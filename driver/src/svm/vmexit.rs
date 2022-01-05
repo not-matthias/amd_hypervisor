@@ -321,7 +321,7 @@ unsafe extern "stdcall" fn handle_vmexit(
     //
     asm!("vmload rax", in("rax") data.host_stack_layout.host_vmcb_pa);
 
-    // #[cfg(not(feature = "no-assertions"))]
+    #[cfg(not(feature = "no-assertions"))]
     assert_eq!(data.host_stack_layout.reserved_1, u64::MAX);
 
     // Guest's RAX is overwritten by the host's value on #VMEXIT and saved in

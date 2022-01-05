@@ -417,6 +417,7 @@ impl NestedPageTable {
             log::trace!("Changing the permissions of a 4kb page");
 
             let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
+            #[cfg(not(feature = "no-assertions"))]
             assert!(pt_entry.is_present());
 
             let flags = permission.get_4kb(pt_entry.flags());
