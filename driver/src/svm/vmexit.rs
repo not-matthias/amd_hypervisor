@@ -163,12 +163,9 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
     //          If not, what should we do?
     //          If yes, we can parse the RET address.
     //
-    //
-
-    // TODO:
-    // - Make sure there's no way to scan physical memory to find the hook
+    // TODO: Make sure there's no way to scan physical memory to find the hook
     //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
-
+    //
     // TODO: Could we intercept page reads via RW error code?
 
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault Ordering`
@@ -190,7 +187,8 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
         hooked_npt
             .npt
             .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
-        return ExitType::IncrementRIP;
+
+        return ExitType::DoNothing;
     }
 
     // Check if there exists a hook for the faulting page.
@@ -204,33 +202,52 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
 
     // TODO: Make a diagram of this.
 
-    if hooked_npt.exists_hook(faulting_pa) {
-        // TODO: We don't check if we are already inside a hooked page.
+    // dbg_break!();
+
+    // We need to do 2 things:
+    // - Change the permissions of the hooked page to RWX
+    // - Detect when the hooked page goes out of scope to restore the permissions.
+    //
+    if let Some(hook_pa) = hooked_npt
+        .find_hook(faulting_pa)
+        .map(|hook| hook.hook_pa.as_u64())
+    {
+        let stack =
+            unsafe { core::slice::from_raw_parts(data.guest_vmcb.save_area.rsp as *mut u64, 10) };
+        let return_address = stack[0];
+        let return_address = PhysicalAddress::from_va(return_address)
+            .align_down_to_base_page()
+            .as_u64();
 
         hooked_npt
             .npt
-            .change_page_permission(faulting_pa, AccessType::ReadWriteExecute);
-    } else {
-        // TODO: Change permission of other pages to RW?
-        // TODO: This changes the permission of the faulting pa and not of the hook!!!!!
+            .change_page_permission(faulting_pa, hook_pa, AccessType::ReadWriteExecute);
 
-        // Hide all other hooks
-        // TODO: Fix this
-        // for hook in hooked_npt.hooks.iter() {
-        //     hooked_npt.npt.change_page_permission(
-        //         hook.physical_address.align_down_to_base_page().as_u64(),
-        //         AccessType::ReadWrite,
-        //     );
-        // }
+        let _ = hooked_npt.npt.split_2mb_to_4kb(return_address);
+        hooked_npt.npt.change_page_permission(
+            return_address,
+            return_address,
+            AccessType::ReadWrite,
+        );
+    } else {
+        // We hit the rw return address. Time to hide all our hooks.
+        //
+        hooked_npt.hide_hooks();
+
+        // Also make the current address (the previous return address) executable again.
+        //
+        hooked_npt.npt.change_page_permission(
+            faulting_pa,
+            faulting_pa,
+            AccessType::ReadWriteExecute,
+        );
     }
 
     // Apply or revert hooks
     //
-    //
     // let hide_hook = || {
     //     map_all(rwx);
     //     map_4k(guest_pa, guest_pa, rw); // revert the hook
-    //     // some additional stuff. TODO: check if needed.
     // };
     // let show_hook = || {
     //     map_all(rw);

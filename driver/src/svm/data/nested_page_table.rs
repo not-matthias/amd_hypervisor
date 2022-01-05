@@ -390,16 +390,16 @@ impl NestedPageTable {
         Some(())
     }
 
-    /// Changes the permission of a single 4kb page.
-    ///
-    pub fn change_page_permission(&mut self, guest_pa: u64, permission: AccessType) {
-        log::info!(
+    /// Changes the permission of a single page (can be 2mb or 4kb).
+    pub fn change_page_permission(&mut self, guest_pa: u64, host_pa: u64, permission: AccessType) {
+        log::trace!(
             "Changing permission of guest page {:#x} to {:?}",
             guest_pa,
             permission
         );
 
         let guest_pa = VAddr::from(guest_pa);
+        let host_pa = PAddr::from(host_pa);
 
         let pdpt_index = pdpt_index(guest_pa);
         let pd_index = pd_index(guest_pa);
@@ -407,20 +407,20 @@ impl NestedPageTable {
 
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
         if pd_entry.is_page() {
-            log::info!("Changing the permissions of a 2mb page");
+            log::trace!("Changing the permissions of a 2mb page");
 
             let flags = permission.get_2mb(pd_entry.flags());
-            let entry = PDEntry::new(pd_entry.address(), flags);
+            let entry = PDEntry::new(host_pa, flags);
 
             *pd_entry = entry;
         } else {
-            log::info!("Changing the permissions of a 4kb page");
+            log::trace!("Changing the permissions of a 4kb page");
 
             let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
             assert!(pt_entry.is_present());
 
             let flags = permission.get_4kb(pt_entry.flags());
-            let entry = PTEntry::new(pd_entry.address(), flags);
+            let entry = PTEntry::new(host_pa, flags);
 
             *pt_entry = entry;
         }

@@ -16,11 +16,11 @@ use x86::bits64::paging::{PAddr, BASE_PAGE_SIZE};
 use x86_64::instructions::interrupts::without_interrupts;
 
 pub struct Hook {
-    /// The address of the original function.    
-    pub address: u64,
+    pub original_va: u64,
+    pub original_pa: PhysicalAddress,
 
-    /// The physical address of the original function.
-    pub physical_address: PhysicalAddress,
+    pub hook_va: u64,
+    pub hook_pa: PhysicalAddress,
 
     // TODO: Unused for now
     pub handler: *const (),
@@ -60,6 +60,23 @@ impl Hook {
         Some(page)
     }
 
+    pub fn from_address(address: u64) -> Option<Self> {
+        let physical_address = PhysicalAddress::from_va(address);
+        let page = Self::copy_page(address)?;
+
+        let hook_va = page.as_ptr() as *mut u64 as u64;
+        let hook_pa = PhysicalAddress::from_va(hook_va);
+
+        Some(Self {
+            original_va: address,
+            original_pa: physical_address,
+            hook_va,
+            hook_pa,
+            handler: core::ptr::null(),
+            page,
+        })
+    }
+
     pub fn new(name: &str, handler: *const ()) -> Option<Self> {
         let address = get_system_routine_address(name)? as u64;
         log::info!("Found address of {}: {:#x}", &name, address);
@@ -67,11 +84,17 @@ impl Hook {
         let physical_address = PhysicalAddress::from_va(address);
         log::info!("Physical address: {:#x}", physical_address.as_u64());
 
+        let page = Self::copy_page(address)?;
+        let hook_va = page.as_ptr() as *mut u64 as u64;
+        let hook_pa = PhysicalAddress::from_va(hook_va);
+
         Some(Self {
-            address,
-            physical_address,
+            original_va: address,
+            original_pa: physical_address,
+            hook_va,
+            hook_pa,
             handler,
-            page: Self::copy_page(address)?,
+            page,
         })
     }
 }
@@ -113,12 +136,14 @@ impl HookedNpt {
         // Split 2mb page into 4kb pages, and set the hooked page to RW
         //
         for hook in self.hooks.iter() {
-            let large_page_base = hook.physical_address.align_down_to_large_page().as_u64();
-            let base_page_base = hook.physical_address.align_down_to_base_page().as_u64();
+            let large_page_base = hook.original_pa.align_down_to_large_page().as_u64();
+            let base_page_base = hook.original_pa.align_down_to_base_page().as_u64();
 
             self.npt.split_2mb_to_4kb(large_page_base)?;
             self.npt
-                .change_page_permission(base_page_base, AccessType::ReadWrite);
+                .change_page_permission(base_page_base, base_page_base, AccessType::ReadWrite);
+
+            unsafe { hook.page.as_ptr().offset(4).write_volatile(0x42) };
         }
 
         Some(())
@@ -128,20 +153,33 @@ impl HookedNpt {
         // TODO: Implement this
     }
 
-    pub fn exists_hook(&self, faulting_pa: u64) -> bool {
+    /// Tries to find a hook for the specified faulting physical address.
+    pub fn find_hook(&self, faulting_pa: u64) -> Option<&Hook> {
         // TODO: Assumes that both addresses are 4kb pages.
 
         let faulting_pa = PhysicalAddress::from_pa(faulting_pa);
         let faulting_pa = faulting_pa.align_down_to_base_page();
 
         for hook in self.hooks.iter() {
-            let hook_pa = hook.physical_address.align_down_to_base_page();
+            let hook_pa = hook.original_pa.align_down_to_base_page();
 
             if hook_pa == faulting_pa {
-                return true;
+                return Some(hook);
             }
         }
 
-        false
+        None
+    }
+
+    /// Hides all the hooks by resetting the pages to their original state. This also resets the page
+    /// permission to RW to wait for the next caller.
+    pub fn hide_hooks(&mut self) -> Option<()> {
+        for hook in self.hooks.iter() {
+            let guest_pa = hook.original_pa.align_down_to_base_page().as_u64();
+            self.npt
+                .change_page_permission(guest_pa, guest_pa, AccessType::ReadWrite);
+        }
+
+        Some(())
     }
 }

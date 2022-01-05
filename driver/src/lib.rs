@@ -35,6 +35,8 @@ static _fltused: i32 = 0;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo<'_>) -> ! {
+    log::info!("Panic handler called: {:?}", _info);
+
     dbg_break!();
 
     unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
@@ -101,6 +103,7 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
     //
     hook_testing::init();
     hook_testing::call_shellcode();
+    hook_testing::print_shellcode();
 
     // Print physical memory pages
     //
@@ -141,13 +144,25 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
             log::info!("Registering driver unload routine");
             unsafe { (*driver).DriverUnload = Some(driver_unload) };
 
-            if virtualize_system().is_some() {
+            let status = if virtualize_system().is_some() {
                 STATUS_SUCCESS
             } else {
                 STATUS_UNSUCCESSFUL
-            }
+            };
+
+            // Call the hook again after initialization
+            //
+            log::info!("Before call");
+            hook_testing::print_shellcode();
+
+            hook_testing::call_shellcode();
+
+            log::info!("After call");
+            hook_testing::print_shellcode();
+
+            return status
         }
-    }
+    };
 }
 
 #[cfg(feature = "stub")]

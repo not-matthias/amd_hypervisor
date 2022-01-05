@@ -18,7 +18,7 @@ pub fn init() -> Option<()> {
     // mov rax, 0x42
     // ret
     //
-    let shellcode = [0xCC, 0x48, 0xC7, 0xC0, 0x42, 0x00, 0x00, 0x00, 0xC3];
+    let shellcode = [0x90, 0x48, 0xC7, 0xC0, 0x84, 0x00, 0x00, 0x00, 0xC3];
     unsafe { core::ptr::copy(shellcode.as_ptr(), memory.as_ptr(), shellcode.len()) };
 
     // Set the globals
@@ -39,6 +39,14 @@ pub fn call_shellcode() {
 
     let fn_ptr = unsafe { core::mem::transmute::<_, ShellcodeFn>(fn_ptr) };
 
-    log::info!("Calling the shellcode.");
     log::info!("Return value: {:x}", fn_ptr());
+}
+
+pub fn print_shellcode() {
+    let fn_ptr = unsafe { ALLOCATED_MEMORY.as_ref().unwrap().as_ptr() as *mut u8 };
+
+    log::info!("Printing shellcode at {:p}", fn_ptr);
+    for i in 0..9 {
+        log::info!("{:x}", unsafe { *fn_ptr.add(i) });
+    }
 }
