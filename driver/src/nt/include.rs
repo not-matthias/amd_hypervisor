@@ -412,6 +412,7 @@ impl Context {
 }
 
 pub macro assert_paged_code() {
+    #[cfg(not(feature = "no-assertions"))]
     assert!(
         unsafe { $crate::nt::irql::KeGetCurrentIrql() } <= $crate::nt::irql::APC_LEVEL,
         "Called at IRQL > APC_LEVEL",

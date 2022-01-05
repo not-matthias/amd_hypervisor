@@ -101,7 +101,10 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     // Initialize the hook testing
     //
+
     hook_testing::init();
+
+    hook_testing::print_shellcode();
     hook_testing::call_shellcode();
     hook_testing::print_shellcode();
 
@@ -126,9 +129,9 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
                 virtualize_system();
             }
 
-            let mut handle = MaybeUninit::uninit();
+            let mut handle = core::mem::MaybeUninit::uninit();
             unsafe {
-                PsCreateSystemThread(
+                crate::nt::include::PsCreateSystemThread(
                     handle.as_mut_ptr() as _,
                     winapi::km::wdm::GENERIC_ALL,
                     0 as _,
@@ -139,7 +142,7 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
                 )
             };
 
-            STATUS_SUCCESS
+            return STATUS_SUCCESS
         } else {
             log::info!("Registering driver unload routine");
             unsafe { (*driver).DriverUnload = Some(driver_unload) };
@@ -152,12 +155,12 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
             // Call the hook again after initialization
             //
-            log::info!("Before call");
+            log::info!("== Before call ==");
             hook_testing::print_shellcode();
 
             hook_testing::call_shellcode();
 
-            log::info!("After call");
+            log::info!("== After call ==");
             hook_testing::print_shellcode();
 
             return status

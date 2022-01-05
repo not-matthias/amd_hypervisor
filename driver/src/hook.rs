@@ -3,18 +3,30 @@
 
 extern crate alloc;
 
-use crate::dbg_break;
+use crate::hook_testing::hook_handler;
 use crate::nt::addresses::PhysicalAddress;
 use crate::nt::include::{assert_paged_code, RtlCopyMemory};
+use crate::nt::inline_hook::InlineHook;
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::data::nested_page_table::NestedPageTable;
 use crate::svm::paging::AccessType;
 use alloc::string::String;
 use alloc::vec::Vec;
+use nt::include::SYSTEM_INFORMATION_CLASS;
 use nt::kernel::get_system_routine_address;
 use x86::bits64::paging::{PAddr, BASE_PAGE_SIZE};
+use x86::current::paging::VAddr;
 use x86_64::instructions::interrupts::without_interrupts;
 
+// TODO: Implement these different hook types
+//
+// There's different hooking types:
+// - Hide memory: Simply writes your own executable code over another and don't care about the original.
+// - Patch function: Overwrite a function without calling the original function.
+// - Hook function: Overwrite a function, but call the original function. TODO: Implement this
+//
+
+// TODO: Convert this to an enum for the different hook types
 pub struct Hook {
     pub original_va: u64,
     pub original_pa: PhysicalAddress,
@@ -23,10 +35,12 @@ pub struct Hook {
     pub hook_pa: PhysicalAddress,
 
     // TODO: Unused for now
-    pub handler: *const (),
+    pub handler: Option<InlineHook>,
 
     pub page: AllocatedMemory<u8>,
 }
+
+pub static mut HOOK: Option<AllocatedMemory<InlineHook>> = None;
 
 impl Hook {
     fn copy_page(address: u64) -> Option<AllocatedMemory<u8>> {
@@ -72,7 +86,36 @@ impl Hook {
             original_pa: physical_address,
             hook_va,
             hook_pa,
-            handler: core::ptr::null(),
+            handler: None,
+            page,
+        })
+    }
+
+    pub fn from_address_with_handler(address: u64, handler: *const ()) -> Option<Self> {
+        let physical_address = PhysicalAddress::from_va(address);
+        let page = Self::copy_page(address)?;
+
+        let hook_va = page.as_ptr() as *mut u64 as u64;
+        let hook_pa = PhysicalAddress::from_va(hook_va);
+
+        // Find the offset from the page base to the function.
+        let fn_offset = VAddr::from_u64(address).base_page_offset();
+        let hook_fn_ptr = hook_va + fn_offset;
+        log::info!("Placing inline hook at {:#x}", hook_fn_ptr);
+
+        unsafe {
+            HOOK = Some(
+                InlineHook::new(hook_fn_ptr, hook_handler as *const ())
+                    .expect("Failed to create inline hook"),
+            );
+        }
+
+        Some(Self {
+            original_va: address,
+            original_pa: physical_address,
+            hook_va,
+            hook_pa,
+            handler: None,
             page,
         })
     }
@@ -88,12 +131,14 @@ impl Hook {
         let hook_va = page.as_ptr() as *mut u64 as u64;
         let hook_pa = PhysicalAddress::from_va(hook_va);
 
+        //
+
         Some(Self {
             original_va: address,
             original_pa: physical_address,
             hook_va,
             hook_pa,
-            handler,
+            handler: None,
             page,
         })
     }
@@ -143,7 +188,10 @@ impl HookedNpt {
             self.npt
                 .change_page_permission(base_page_base, base_page_base, AccessType::ReadWrite);
 
-            unsafe { hook.page.as_ptr().offset(4).write_volatile(0x42) };
+            // Install the hook here
+            //
+            // unsafe { hook.page.as_ptr().offset(4).write_volatile(0x42) };
+            unsafe { HOOK.as_ref().unwrap().enable() };
         }
 
         Some(())

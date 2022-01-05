@@ -15,16 +15,18 @@ impl SharedData {
         let mut data = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
         data.msr_permission_map = MsrBitmap::new()?;
         data.hooked_npt = HookedNpt::new()?;
-        // data.hooked_npt.hook("ZwQuerySystemInformation", 0 as _)?;
 
-        // Create the hook and change the 3rd byte (return value)
+        // Create the hook
         //
-
         let hook = unsafe {
-            Hook::from_address(crate::hook_testing::ALLOCATED_MEMORY.as_ref()?.as_ptr() as _)?
+            Hook::from_address_with_handler(
+                crate::hook_testing::ALLOCATED_MEMORY.as_ref()?.as_ptr() as _,
+                0 as _,
+            )?
         };
         data.hooked_npt.hooks.push(hook);
 
+        // data.hooked_npt.hook("ZwQuerySystemInformation", 0 as _)?;
         // data.hooked_npt = NestedPageTable::identity_2mb()?;
 
         Some(data)
