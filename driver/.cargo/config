@@ -23,6 +23,10 @@ rustflags = [
     "-C", "link-arg=/ENTRY:DriverEntry",
     "-C", "link-arg=/MERGE:.edata=.rdata",
     "-C", "link-arg=/MERGE:.rustc=.data",
+#    "-C", "link-arg=/MERGE:.pdata=.rdata", # Experimental
+#    "-C", "link-arg=/MERGE:.rdata=.data", # Experimental
+#    "-C", "link-arg=/MERGE:.kkuser=.ukuser", # Experimental
+#    "-C", "link-arg=/MERGE:.data=.text", # Experimental
     "-C", "link-arg=/INTEGRITYCHECK"
 ]
 

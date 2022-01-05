@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 [features]
 default = []
 no-assertions = []
-mmap = [] # ["log/release_max_level_off", "no-assertions"]
+mmap = ["log/release_max_level_off", "no-assertions"]
 stub = []
 
 [dependencies]
@@ -29,13 +29,15 @@ obfstr = "0.3.0"
 elain = "0.3.0"
 bitflags = "1.3.2"
 bitfield = "0.13.2"
-x86_64 = { version = "0.14.7", features = ["nightly", "const_fn", "abi_x86_interrupt"] }
+x86_64 = { version = "0.14.7", features = ["nightly", "const_fn", "abi_x86_interrupt", "instructions"] }
 x86 = { git = "https://github.com/dancrossnyc/rust-x86", branch = "asm" }
 winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", features = ["wdm", "ntstatus"] }
+once_cell = { version = "1.9.0", default-features = false, features = ["unstable", "alloc"] }
 
 [profile.release]
 lto = "thin"    # IMPORTANT: "fat" doesn't work and will result in an access violation
-#debug = false
+#lto = "fat"
 debug = true
 panic = "abort"
-incremental = true
+#overflow-checks = false
+#debug-assertions = false
