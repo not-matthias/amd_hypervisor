@@ -24,6 +24,7 @@ use winapi::shared::{
 
 pub mod debug;
 pub mod hook;
+pub mod hook_testing;
 pub mod nt;
 pub mod support;
 pub mod svm;
@@ -96,13 +97,15 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     dbg_break!();
 
+    // Initialize the hook testing
+    //
+    hook_testing::init();
+    hook_testing::call_shellcode();
+
     // Print physical memory pages
     //
 
-    let Some(desc) = PhysicalMemoryDescriptor::new() else {
-        log::error!("Failed to create physical memory descriptor");
-        return STATUS_UNSUCCESSFUL;
-    };
+    let desc = PhysicalMemoryDescriptor::new();
 
     log::info!("Physical memory descriptors: {:x?}", desc);
     log::info!("Found {:#x?} pages", desc.page_count());

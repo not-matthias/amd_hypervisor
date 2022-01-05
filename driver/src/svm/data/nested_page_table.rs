@@ -11,7 +11,6 @@ use x86::bits64::paging::{
     PML4, PT,
 };
 
-
 /// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
 pub struct NestedPageTable {
