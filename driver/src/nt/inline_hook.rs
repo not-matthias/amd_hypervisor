@@ -17,7 +17,11 @@ impl InlineHook {
     // Note: We have to allocate a new instance here, so that it's valid after the virtualization. Otherwise,
     // all the addresses would be 0x0.
     pub fn new(address: u64, handler: *const ()) -> Option<AllocatedMemory<Self>> {
-        log::info!("Creating a new inline hook");
+        log::info!(
+            "Creating a new inline hook. Address: {:x}, handler: {:x}",
+            address,
+            handler as u64
+        );
 
         let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
         hook.trampoline = Self::trampoline(address as u64)?;

@@ -1,5 +1,6 @@
 extern crate alloc;
 
+use crate::hook::Hook;
 use crate::nt::include::Context;
 use crate::nt::memory::AllocatedMemory;
 use crate::nt::processor::{processor_count, ProcessorExecutor};
@@ -28,7 +29,7 @@ pub struct Processors {
 
 impl Processors {
     /// Creates new instance for all the processors on the system.
-    pub fn new() -> Option<Self> {
+    pub fn new(hook: Vec<Hook>) -> Option<Self> {
         if !support::is_svm_supported() {
             log::error!("SVM is not supported");
             return None;
@@ -40,7 +41,7 @@ impl Processors {
         log::info!("Found {} processors", processors.len());
 
         Some(Self {
-            shared_data: SharedData::new()?,
+            shared_data: SharedData::new(hook)?,
             processors,
         })
     }
@@ -164,7 +165,8 @@ impl Processor {
             unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
         }
 
-        // TODO: Move this to the vmexit handler
+        // We virtualized the processor so we can enable the hooks.
+        //
         shared_data.hooked_npt.enable();
 
         true

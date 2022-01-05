@@ -9,12 +9,20 @@
 #![feature(arbitrary_self_types)]
 #![feature(const_mut_refs)]
 #![feature(const_ptr_as_ref)]
+#![feature(const_trait_impl)]
+#![allow(clippy::new_ret_no_self)]
 
+extern crate alloc;
+
+use self::hook::testing;
 use crate::debug::dbg_break;
+use crate::hook::{handlers, Hook, HookType};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
+use crate::nt::ptr::Pointer;
 use crate::svm::Processors;
-use core::panic::PanicInfo;
+use alloc::vec;
+use alloc::vec::Vec;
 use log::{KernelLogger, LevelFilter};
 use winapi::km::wdm::DRIVER_OBJECT;
 use winapi::shared::{
@@ -24,50 +32,50 @@ use winapi::shared::{
 
 pub mod debug;
 pub mod hook;
-pub mod hook_testing;
+pub mod lang;
 pub mod nt;
 pub mod support;
 pub mod svm;
 
-#[no_mangle]
-#[allow(bad_style)]
-static _fltused: i32 = 0;
-
-#[panic_handler]
-fn panic(_info: &PanicInfo<'_>) -> ! {
-    log::info!("Panic handler called: {:?}", _info);
-
-    dbg_break!();
-
-    unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
-}
-
-#[lang = "eh_personality"]
-extern "C" fn eh_personality() {}
-
-#[no_mangle]
-extern "C" fn __CxxFrameHandler3() {}
-
 #[global_allocator]
 static GLOBAL: km_alloc::KernelAlloc = km_alloc::KernelAlloc;
-
 static LOGGER: KernelLogger = KernelLogger;
 
 static mut PROCESSORS: Option<Processors> = None;
 
-#[cfg(not(feature = "mmap"))]
-pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
-    // Devirtualize all processors and drop the global struct.
+fn init_hooks() -> Option<Vec<Hook>> {
+    // ZwQuerySystemInformation
     //
-    if let Some(mut processors) = unsafe { PROCESSORS.take() } {
-        processors.devirtualize();
-
-        core::mem::drop(processors);
+    let zwqsi_hook = Hook::hook_function(
+        "ZwQuerySystemInformation",
+        handlers::zw_query_system_information as *const (),
+    )?;
+    unsafe {
+        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
+            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Page => None,
+        };
     }
+
+    // ExAllocatePool
+    //
+    let eapwt_hook = Hook::hook_function(
+        "ExAllocatePoolWithTag",
+        handlers::ex_allocate_pool_with_tag as *const (),
+    )?;
+    unsafe {
+        handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
+            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Page => None,
+        };
+    }
+
+    Some(vec![zwqsi_hook, eapwt_hook])
 }
 
 fn virtualize_system() -> Option<()> {
-    let Some(mut processors) = Processors::new() else {
+    let hooks = init_hooks()?;
+    let Some(mut processors) = Processors::new(hooks) else {
         log::info!("Failed to create processors");
         return None;
     };
@@ -85,9 +93,20 @@ fn virtualize_system() -> Option<()> {
     Some(())
 }
 
+#[cfg(not(feature = "mmap"))]
+pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
+    // Devirtualize all processors and drop the global struct.
+    //
+    if let Some(mut processors) = unsafe { PROCESSORS.take() } {
+        processors.devirtualize();
+
+        core::mem::drop(processors);
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
+    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
 
     // TODO: Set this up.
     // com_logger::builder()
@@ -102,11 +121,11 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
     // Initialize the hook testing
     //
 
-    hook_testing::init();
+    testing::init();
 
-    hook_testing::print_shellcode();
-    hook_testing::call_shellcode();
-    hook_testing::print_shellcode();
+    testing::print_shellcode();
+    testing::call_shellcode();
+    testing::print_shellcode();
 
     // Print physical memory pages
     //
@@ -142,9 +161,10 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
                 )
             };
 
-            return STATUS_SUCCESS
+            STATUS_SUCCESS
         } else {
             log::info!("Registering driver unload routine");
+            #[allow(clippy::not_unsafe_ptr_arg_deref)]
             unsafe { (*driver).DriverUnload = Some(driver_unload) };
 
             let status = if virtualize_system().is_some() {
@@ -156,16 +176,16 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
             // Call the hook again after initialization
             //
             log::info!("== Before call ==");
-            hook_testing::print_shellcode();
+            testing::print_shellcode();
 
-            hook_testing::call_shellcode();
+            testing::call_shellcode();
 
             log::info!("== After call ==");
-            hook_testing::print_shellcode();
+            testing::print_shellcode();
 
-            return status
+            status
         }
-    };
+    }
 }
 
 #[cfg(feature = "stub")]

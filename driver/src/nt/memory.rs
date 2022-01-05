@@ -130,20 +130,24 @@ impl<T> AllocatedMemory<T> {
         self.0.as_ptr()
     }
 
-    pub const fn as_ref(&self) -> &T {
-        unsafe { self.0.as_ref() }
-    }
-
-    pub const fn as_mut(&mut self) -> &mut T {
-        unsafe { self.0.as_mut() }
-    }
-
     pub const fn inner(&self) -> &NonNull<T> {
         &self.0
     }
 }
 
-impl<T> Deref for AllocatedMemory<T> {
+impl<T> const AsRef<T> for AllocatedMemory<T> {
+    fn as_ref(&self) -> &T {
+        unsafe { self.0.as_ref() }
+    }
+}
+
+impl<T> const AsMut<T> for AllocatedMemory<T> {
+    fn as_mut(&mut self) -> &mut T {
+        unsafe { self.0.as_mut() }
+    }
+}
+
+impl<T> const Deref for AllocatedMemory<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -151,7 +155,7 @@ impl<T> Deref for AllocatedMemory<T> {
     }
 }
 
-impl<T> DerefMut for AllocatedMemory<T> {
+impl<T> const DerefMut for AllocatedMemory<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.0.as_mut() }
     }

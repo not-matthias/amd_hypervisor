@@ -334,7 +334,7 @@ impl NestedPageTable {
         if !pd_entry.is_present() {
             let pa = physical_address(self.pt_entries[pdpt_index][pd_index].as_ptr() as _);
             *pd_entry = PDEntry::new(
-                PAddr::from(pa),
+                pa,
                 PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US]),
             );
         }

@@ -22,17 +22,21 @@ impl<T> Pointer<T> {
     pub fn as_ptr(&self) -> *mut T {
         self.0.as_ptr()
     }
+}
 
-    pub fn as_ref(&self) -> &T {
+impl<T> const AsRef<T> for Pointer<T> {
+    fn as_ref(&self) -> &T {
         unsafe { self.0.as_ref() }
     }
+}
 
-    pub fn as_mut(&mut self) -> &mut T {
+impl<T> const AsMut<T> for Pointer<T> {
+    fn as_mut(&mut self) -> &mut T {
         unsafe { self.0.as_mut() }
     }
 }
 
-impl<T> Deref for Pointer<T> {
+impl<T> const Deref for Pointer<T> {
     type Target = T;
 
     fn deref(&self) -> &T {
@@ -40,7 +44,7 @@ impl<T> Deref for Pointer<T> {
     }
 }
 
-impl<T> DerefMut for Pointer<T> {
+impl<T> const DerefMut for Pointer<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.0.as_mut() }
     }

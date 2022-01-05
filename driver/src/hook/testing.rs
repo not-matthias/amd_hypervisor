@@ -85,8 +85,10 @@ pub fn print_shellcode() {
 pub fn hook_handler(a: u64) -> u64 {
     log::info!("hook handler called");
 
-    let trampoline = unsafe { crate::hook::HOOK.as_ref().unwrap().trampoline_address() };
-    let trampoline_fn = unsafe { core::mem::transmute::<_, extern "C" fn(u64) -> u64>(trampoline) };
+    // let trampoline = unsafe { crate::hook::HOOK.as_ref().unwrap().trampoline_address() };
+    // let trampoline_fn = unsafe { core::mem::transmute::<_, extern "C" fn(u64) -> u64>(trampoline) };
+    //
+    // trampoline_fn(a + 2)
 
-    trampoline_fn(a + 2)
+    a
 }
