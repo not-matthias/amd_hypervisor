@@ -87,6 +87,8 @@ extern "system" {
     pub fn MmGetVirtualForPhysical(PhysicalAddress: PHYSICAL_ADDRESS) -> *mut u64;
 
     pub fn RtlCopyMemory(destination: *mut u64, source: *mut u64, length: usize);
+
+    pub fn ExAllocatePoolWithTag(PoolType: u32, NumberOfBytes: usize, Tag: u32) -> u64;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes

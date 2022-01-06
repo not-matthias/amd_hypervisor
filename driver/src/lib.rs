@@ -18,7 +18,10 @@ use self::hook::testing;
 use crate::debug::dbg_break;
 use crate::hook::{handlers, Hook, HookType};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
+
 use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
+
+use crate::nt::inline_hook::InlineHook;
 use crate::nt::ptr::Pointer;
 use crate::svm::Processors;
 use alloc::vec;
@@ -46,31 +49,57 @@ static mut PROCESSORS: Option<Processors> = None;
 fn init_hooks() -> Option<Vec<Hook>> {
     // ZwQuerySystemInformation
     //
-    let zwqsi_hook = Hook::hook_function(
-        "ZwQuerySystemInformation",
-        handlers::zw_query_system_information as *const (),
-    )?;
-    unsafe {
-        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => None,
-        };
-    }
+    // let zwqsi_hook = Hook::hook_function(
+    //     "ZwQuerySystemInformation",
+    //     handlers::zw_query_system_information as *const (),
+    // )?;
+    // unsafe {
+    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
+    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+    //         HookType::Page => None,
+    //     };
+    // }
 
     // ExAllocatePool
     //
-    let eapwt_hook = Hook::hook_function(
-        "ExAllocatePoolWithTag",
-        handlers::ex_allocate_pool_with_tag as *const (),
+    // let eapwt_hook = Hook::hook_function(
+    //     "ExAllocatePoolWithTag",
+    //     handlers::ex_allocate_pool_with_tag as *const (),
+    // )?;
+    // unsafe {
+    //     handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
+    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+    //         HookType::Page => unreachable!(),
+    //     };
+    // }
+
+    // MmIsAddressValid
+    //
+    let mmiav_hook = Hook::hook_function(
+        "MmIsAddressValid",
+        handlers::mm_is_address_valid as *const (),
     )?;
     unsafe {
-        handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
+        handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
             HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => None,
+            HookType::Page => unreachable!(),
         };
     }
 
-    Some(vec![zwqsi_hook, eapwt_hook])
+    // Testing Hook
+    //
+    // let testing_hook =
+    //     Hook::hook_page(
+    //         unsafe { hook::testing::ALLOCATED_MEMORY.as_ref().unwrap().as_ptr() } as u64,
+    //     )?;
+    // let inline_hook = InlineHook::new(
+    //     testing_hook.hook_va,
+    //     hook::testing::hook_handler as *const (),
+    // )?;
+    // inline_hook.enable();
+    // unsafe { testing::HOOK = Some(inline_hook) };
+
+    Some(vec![mmiav_hook])
 }
 
 fn virtualize_system() -> Option<()> {
@@ -88,8 +117,6 @@ fn virtualize_system() -> Option<()> {
     //
     unsafe { PROCESSORS = Some(processors) };
 
-    // TODO: Initialize hook here
-
     Some(())
 }
 
@@ -106,7 +133,9 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Trace));
+    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
+
+    // TODO: Fix / find memory leak
 
     // TODO: Set this up.
     // com_logger::builder()
@@ -175,13 +204,11 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
             // Call the hook again after initialization
             //
-            log::info!("== Before call ==");
             testing::print_shellcode();
-
             testing::call_shellcode();
-
-            log::info!("== After call ==");
             testing::print_shellcode();
+
+            handlers::test_hooks();
 
             status
         }

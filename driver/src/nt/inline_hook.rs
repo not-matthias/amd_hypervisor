@@ -38,11 +38,10 @@ impl InlineHook {
 
         let jmp_to_handler = Self::jmp_shellcode(self.handler);
 
-        log::info!("jmp_to_handler: {:x?}", self.jmp_to_handler);
         log::info!(
-            "Writing the shellcode {:x?} to {:#x} (size = {:?}).",
+            "Writing the shellcode {:x?} to {:p} (size = {:?}).",
             self.jmp_to_handler,
-            self.handler as u64,
+            self.trampoline_address(),
             self.jmp_to_handler.len()
         );
 

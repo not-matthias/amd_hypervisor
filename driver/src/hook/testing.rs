@@ -2,6 +2,7 @@
 
 use crate::nt::addresses::PhysicalAddress;
 use crate::nt::memory::AllocatedMemory;
+use crate::InlineHook;
 
 pub static mut ALLOCATED_MEMORY: Option<AllocatedMemory<u8>> = None;
 
@@ -26,15 +27,19 @@ pub fn init() -> Option<()> {
         0x48, 0x83, 0xC1, 0x02, 0x48, 0x89, 0xC8, 0xC3,
     ];
 
-    // mov rax, 0x42
-    // ret
+    // Copy to page start
     //
-    // let shellcode = [
-    //     0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90,
-    //     0x48, 0xC7, 0xC0, 0x84, 0x00, 0x00, 0x00, 0xC3,
-    // ];
-
     unsafe { core::ptr::copy(shellcode.as_ptr(), memory.as_ptr(), shellcode.len()) };
+
+    // Copy to page middle
+    //
+    unsafe {
+        core::ptr::copy(
+            shellcode.as_ptr(),
+            memory.as_ptr().add(0x500),
+            shellcode.len(),
+        )
+    };
 
     // Set the globals
     //
@@ -49,12 +54,19 @@ pub fn init() -> Option<()> {
 pub fn call_shellcode() {
     type ShellcodeFn = extern "C" fn(u64) -> u64;
 
-    let fn_ptr = unsafe { ALLOCATED_MEMORY.as_ref().unwrap().as_ptr() as *mut u64 };
-    log::info!("Calling shellcode at {:p}", fn_ptr);
+    let fn_ptr = unsafe {
+        core::mem::transmute::<_, ShellcodeFn>(
+            ALLOCATED_MEMORY.as_ref().unwrap().as_ptr() as *mut u64
+        )
+    };
+    log::info!("[page] add_two(42): {}", fn_ptr(42));
 
-    let fn_ptr = unsafe { core::mem::transmute::<_, ShellcodeFn>(fn_ptr) };
-
-    log::info!("Return value of add_two(42): {}", fn_ptr(42));
+    let fn_ptr = unsafe {
+        core::mem::transmute::<_, ShellcodeFn>(
+            (ALLOCATED_MEMORY.as_ref().unwrap().as_ptr().offset(0x500)) as *mut u64,
+        )
+    };
+    log::info!("[page+0x500] add_two(42): {}", fn_ptr(42));
 }
 
 pub fn print_shellcode() {
@@ -66,8 +78,8 @@ pub fn print_shellcode() {
 
 // ============================================================================
 
-// static mut HOOK: Option<InlineHook> = None;
-//
+pub static mut HOOK: Option<AllocatedMemory<InlineHook>> = None;
+
 // pub fn setup_hook() {
 //     let hook = unsafe {
 //         InlineHook::new(

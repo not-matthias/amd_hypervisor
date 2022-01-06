@@ -8,6 +8,7 @@ use crate::svm::data::processor::ProcessorData;
 use crate::svm::events::EventInjection;
 use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
 use core::arch::asm;
+use nt::include::MmIsAddressValid;
 
 use crate::svm::paging::AccessType;
 use x86::cpuid::cpuid;
@@ -156,6 +157,79 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
     ExitType::DoNothing
 }
 
+/// Tries to find the return address based on the stack pointer.
+/// TODO: Move this to a different module.
+/// TODO: Checkout if `RtlVirtualUnwind ` is easier. @bright recommended it
+pub fn find_return_address(rsp: u64) -> Option<u64> {
+    const MAX_DEPTH: usize = 15;
+
+    for i in 0..MAX_DEPTH {
+        let stack_ptr = unsafe { (rsp as *mut u64).add(i) };
+        if unsafe { !MmIsAddressValid(stack_ptr as _) } {
+            continue;
+        }
+
+        let ret_addr = unsafe { stack_ptr.read_volatile() };
+        if ret_addr < 0x7FFF_FFFF_FFF || unsafe { !MmIsAddressValid(ret_addr as _) } {
+            continue;
+        }
+
+        let valid_opcode = |addr, opcode, opcode_size: isize| {
+            let opcode_ptr = unsafe { (addr as *mut u8).offset(-opcode_size) };
+            if unsafe { !MmIsAddressValid(opcode_ptr as _) } {
+                return None;
+            }
+
+            let opcode_value = unsafe { (addr as *mut u8).offset(-opcode_size).read_volatile() };
+            if opcode_value == opcode {
+                log::info!("Found near call at {:x}", addr - opcode_size as u64);
+                Some(addr)
+            } else {
+                None
+            }
+        };
+
+        // Call near, relative, displacement relative to next instruction. 32-bit displacement sign extended to 64-bits in 64-bit mode.
+        //
+        const REL_NEAR_OPCODE: u8 = 0xE8;
+        const REL_NEAR_SIZE: isize = 5;
+
+        if let Some(addr) = valid_opcode(ret_addr, REL_NEAR_OPCODE, REL_NEAR_SIZE) {
+            return Some(addr);
+        }
+
+        // Call near, absolute indirect, address given in r/m64.
+        //
+        const CALL_NEAR_ABS_IND_OPCODE: u8 = 0xFF;
+        const CALL_NEAR_ABS_IND_SIZE: isize = 2;
+        // TODO: Find example and
+
+        if let Some(addr) = valid_opcode(ret_addr, CALL_NEAR_ABS_IND_OPCODE, CALL_NEAR_ABS_IND_SIZE)
+        {
+            log::info!("Found near indirect abs call at {:x}", addr);
+            return Some(addr);
+        }
+
+        // Call far, absolute indirect address given in m16:16.
+        //
+        // Example: `call    qword ptr [rax+28h]` (opcodes: `FF 50 28`)
+        //
+        const CALL_FAR_ABS_IND_OPCODE: u8 = 0xFF;
+        const CALL_FAR_ABS_IND_SIZE: isize = 3;
+
+        if let Some(addr) = valid_opcode(ret_addr, CALL_FAR_ABS_IND_OPCODE, CALL_FAR_ABS_IND_SIZE) {
+            log::info!("Found far call at {:x}", addr);
+            return Some(addr);
+        }
+
+        // TODO: Check other calls
+        // https://hikalium.github.io/opv86/?q=call
+        // https://www.felixcloutier.com/x86/call
+    }
+
+    None
+}
+
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
@@ -200,29 +274,45 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
     // - #2 - Change permission of hook page to RW and of other pages to RWX.
     //
 
-    // TODO: Make a diagram of this.
-
-    // dbg_break!();
-
     // We need to do 2 things:
     // - Change the permissions of the hooked page to RWX
     // - Detect when the hooked page goes out of scope to restore the permissions.
     //
-    if let Some(hook_pa) = hooked_npt
+    if let Some(hooked_page_pa) = hooked_npt
         .find_hook(faulting_pa)
-        .map(|hook| hook.hook_pa.as_u64())
+        .map(|hook| hook.page_pa.as_u64())
     {
-        let stack =
-            unsafe { core::slice::from_raw_parts(data.guest_vmcb.save_area.rsp as *mut u64, 10) };
-        let return_address = stack[0];
+        // Find the correct ret address
+        //
+        // Why do we need to do this? Because there's certain situations where we don't use `call` to
+        // jump to the code inside the page. If it's (un)-conditional jumps, then we don't have any
+        // options to detect where the caller came from.
+        //
+        //
+        // The guest might push data onto the stack, so we have to find the correct ret address.
+        // Hard coded for now: 0x48
+        //
+        // Why can't we use rbp? Because it's often used for other purposes. This is a very common optimization.
+        //
+
+        let rsp = data.guest_vmcb.save_area.rsp;
+
+        let Some(return_address) = find_return_address(rsp) else {
+            log::info!("Failed to find return address");
+            dbg_break!();
+            return ExitType::DoNothing;
+        };
+        log::info!("Return address: {:x}", return_address);
         let return_address = PhysicalAddress::from_va(return_address)
             .align_down_to_base_page()
             .as_u64();
 
-        hooked_npt
-            .npt
-            .change_page_permission(faulting_pa, hook_pa, AccessType::ReadWriteExecute);
-
+        log::info!("==> Showing the hooks");
+        hooked_npt.npt.change_page_permission(
+            faulting_pa,
+            hooked_page_pa,
+            AccessType::ReadWriteExecute,
+        );
         let _ = hooked_npt.npt.split_2mb_to_4kb(return_address);
         hooked_npt.npt.change_page_permission(
             return_address,
@@ -230,6 +320,8 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
             AccessType::ReadWrite,
         );
     } else {
+        log::info!("==> Hiding the hooks");
+
         // We hit the rw return address. Time to hide all our hooks.
         //
         hooked_npt.hide_hooks();
