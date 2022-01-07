@@ -1,7 +1,7 @@
 use crate::nt::inline_hook::InlineHook;
 use crate::nt::ptr::Pointer;
 
-use nt::include::MmIsAddressValid;
+use nt::include::{ZwQuerySystemInformation, SYSTEM_INFORMATION_CLASS};
 
 use crate::dbg_break;
 use winapi::shared::ntdef::NTSTATUS;
@@ -26,7 +26,7 @@ pub fn zw_query_system_information(
     log::info!("Calling original.");
     let fn_ptr = unsafe {
         core::mem::transmute::<_, fn(u32, u64, u32, u32) -> NTSTATUS>(
-            ZWQSI_ORIGINAL.as_ref().unwrap().as_ptr(),
+            ZWQSI_ORIGINAL.as_ref().unwrap().trampoline_address(),
         )
     };
     fn_ptr(
@@ -51,34 +51,49 @@ pub fn ex_allocate_pool_with_tag(pool_tag: u32, number_of_bytes: u64, tag: u32) 
     log::info!("Calling original.");
     let fn_ptr = unsafe {
         core::mem::transmute::<_, fn(u32, u64, u32) -> *mut u64>(
-            EAPWT_ORIGINAL.as_ref().unwrap().as_ptr(),
+            EAPWT_ORIGINAL.as_ref().unwrap().trampoline_address(),
         )
     };
     fn_ptr(pool_tag, number_of_bytes, tag)
 }
 
+// Currently not supported because of the minimalistic InlineHook implementation.
 pub static mut MMIAV_ORIGINAL: Option<Pointer<InlineHook>> = None;
 pub fn mm_is_address_valid(ptr: u64) -> bool {
+    log::info!("Called mm_is_address_valid({:x})", ptr);
+
     dbg_break!();
 
     // Call original
     //
-    log::info!("HOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOK CALLED");
     let fn_ptr = unsafe {
-        core::mem::transmute::<_, fn(u64) -> bool>(MMIAV_ORIGINAL.as_ref().unwrap().as_ptr())
+        core::mem::transmute::<_, fn(u64) -> bool>(
+            MMIAV_ORIGINAL.as_ref().unwrap().trampoline_address(),
+        )
     };
+    log::info!("Calling original: {:x}", fn_ptr as u64);
 
     fn_ptr(ptr)
 }
 
+// This can't be in the same page as the hook handler.
+#[link_section = ".custom$test_hooks"]
+#[inline(never)]
 pub fn test_hooks() {
     log::info!("Testing hooks.");
 
     // Test zw_query_system_information
     //
-    // log::info!("Testing zw_query_system_information.");
-    // let mut status = unsafe { zw_query_system_information(0x1, 0x0, 0x0, 0x0) };
-    // log::info!("zw_query_system_information returned {:x}.", status);
+    log::info!("Testing zw_query_system_information.");
+    let status = unsafe {
+        ZwQuerySystemInformation(
+            SYSTEM_INFORMATION_CLASS::SystemProcessInformation,
+            0x0 as _,
+            0x0,
+            0x0 as _,
+        )
+    };
+    log::info!("zw_query_system_information returned {:x}.", status);
 
     // Test ex_allocate_pool_with_tag
     //
@@ -92,9 +107,9 @@ pub fn test_hooks() {
     //
     // unsafe { ExFreePool(ptr as _) };
 
-    unsafe { MmIsAddressValid(0 as _) };
+    // Test MmIsAddressValid
+    //
+    // unsafe { MmIsAddressValid(0 as _) };
 
     dbg_break!();
-
-    // TODO: This doesn't call our hook handler...
 }

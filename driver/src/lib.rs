@@ -49,16 +49,16 @@ static mut PROCESSORS: Option<Processors> = None;
 fn init_hooks() -> Option<Vec<Hook>> {
     // ZwQuerySystemInformation
     //
-    // let zwqsi_hook = Hook::hook_function(
-    //     "ZwQuerySystemInformation",
-    //     handlers::zw_query_system_information as *const (),
-    // )?;
-    // unsafe {
-    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-    //         HookType::Page => None,
-    //     };
-    // }
+    let zwqsi_hook = Hook::hook_function(
+        "ZwQuerySystemInformation",
+        handlers::zw_query_system_information as *const (),
+    )?;
+    unsafe {
+        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
+            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Page => None,
+        };
+    }
 
     // ExAllocatePool
     //
@@ -73,33 +73,21 @@ fn init_hooks() -> Option<Vec<Hook>> {
     //     };
     // }
 
-    // MmIsAddressValid
-    //
-    let mmiav_hook = Hook::hook_function(
-        "MmIsAddressValid",
-        handlers::mm_is_address_valid as *const (),
-    )?;
-    unsafe {
-        handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => unreachable!(),
-        };
-    }
-
-    // Testing Hook
-    //
-    // let testing_hook =
-    //     Hook::hook_page(
-    //         unsafe { hook::testing::ALLOCATED_MEMORY.as_ref().unwrap().as_ptr() } as u64,
-    //     )?;
-    // let inline_hook = InlineHook::new(
-    //     testing_hook.hook_va,
-    //     hook::testing::hook_handler as *const (),
+    // Currently not supported because of the minimalistic InlineHook implementation.
+    // // MmIsAddressValid
+    // //
+    // let mmiav_hook = Hook::hook_function(
+    //     "MmIsAddressValid",
+    //     handlers::mm_is_address_valid as *const (),
     // )?;
-    // inline_hook.enable();
-    // unsafe { testing::HOOK = Some(inline_hook) };
+    // unsafe {
+    //     handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
+    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+    //         HookType::Page => unreachable!(),
+    //     };
+    // }
 
-    Some(vec![mmiav_hook])
+    Some(vec![zwqsi_hook])
 }
 
 fn virtualize_system() -> Option<()> {
