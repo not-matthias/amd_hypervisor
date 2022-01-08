@@ -176,15 +176,15 @@ impl HookedNpt {
             let large_page_base = hook.original_pa.align_down_to_large_page().as_u64();
             let base_page_base = hook.original_pa.align_down_to_base_page().as_u64();
 
-            self.npt.split_2mb_to_4kb(large_page_base)?;
-            self.npt
-                .change_page_permission(base_page_base, base_page_base, AccessType::ReadWrite);
-
             // Enable inline hook
             //
             if let HookType::Function { inline_hook } = &hook.hook_type {
                 inline_hook.enable()
             }
+
+            self.npt.split_2mb_to_4kb(large_page_base)?;
+            self.npt
+                .change_page_permission(base_page_base, base_page_base, AccessType::ReadWrite);
         }
 
         Some(())
