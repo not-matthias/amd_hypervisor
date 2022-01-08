@@ -1,11 +1,15 @@
-use crate::nt::include::RtlCopyMemory;
+use crate::nt::include::{KeInvalidateAllCaches, RtlCopyMemory};
 use crate::nt::memory::AllocatedMemory;
 use alloc::vec;
 use alloc::vec::Vec;
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, InstructionBlock,
 };
+use nt::include::KPROCESSOR_MODE::KernelMode;
+use nt::include::LOCK_OPERATION::IoReadAccess;
+use nt::include::{IoAllocateMdl, IoFreeMdl, MmProbeAndLockPages, MmUnlockPages, PMDL};
 use snafu::prelude::*;
+use x86::bits64::paging::BASE_PAGE_SIZE;
 
 pub const JMP_SHELLCODE_LEN: usize = 14;
 pub const BP_SHELLCODE_LEN: usize = 1;
@@ -51,6 +55,8 @@ pub struct InlineHook {
     /// Address where the inline hook has been written to (shadow page)
     hook_address: u64,
     handler: u64,
+
+    mdl: PMDL,
 
     hook_type: HookType,
     enabled: bool,
@@ -108,6 +114,24 @@ impl InlineHook {
             }
         };
 
+        // Lock virtual address. See: TODO
+        //
+        let mdl = unsafe {
+            IoAllocateMdl(
+                original_address as _,
+                BASE_PAGE_SIZE as _,
+                false,
+                false,
+                0 as _,
+            )
+        };
+        if mdl.is_null() {
+            log::warn!("Failed to allocate mdl");
+            return None;
+        }
+        unsafe { MmProbeAndLockPages(mdl, KernelMode, IoReadAccess) };
+        // TODO: Try catch in rust?
+
         //
         //
         let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
@@ -116,6 +140,7 @@ impl InlineHook {
         hook.enabled = false;
         hook.hook_address = hook_address;
         hook.original_address = original_address;
+        hook.mdl = mdl;
         hook.handler = handler as u64;
 
         Some(hook)
@@ -144,6 +169,8 @@ impl InlineHook {
                 jmp_to_handler.len(),
             );
         }
+
+        unsafe { KeInvalidateAllCaches() };
     }
 
     /// Creates the jmp shellcode.
@@ -185,6 +212,7 @@ impl InlineHook {
         unsafe {
             (shellcode.as_mut_ptr().add(6) as *mut u64).write_volatile(target_address as u64)
         };
+        log::info!("Jmp shellcode: {:x?}", shellcode);
 
         shellcode
     }
@@ -218,7 +246,7 @@ impl InlineHook {
         let bytes = unsafe {
             core::slice::from_raw_parts(address as *mut u8, usize::max(required_size * 2, 15))
         };
-        let mut decoder = Decoder::with_ip(64, &bytes, address, DecoderOptions::NONE);
+        let mut decoder = Decoder::with_ip(64, bytes, address, DecoderOptions::NONE);
 
         let mut total_bytes = 0;
         let mut trampoline = Vec::new();
@@ -229,6 +257,10 @@ impl InlineHook {
 
             if total_bytes >= required_size {
                 break;
+            }
+
+            if instr.is_ip_rel_memory_operand() {
+                return Err(InlineHookError::RelativeInstruction);
             }
 
             // Create the new trampoline instruction
@@ -261,8 +293,8 @@ impl InlineHook {
 
         // Allocate new memory for the trampoline and encode the instructions.
         //
-        let memory = AllocatedMemory::<u8>::alloc(total_bytes)
-            .ok_or_else(|| InlineHookError::AllocationFailed)?;
+        let memory = AllocatedMemory::<u8>::alloc_executable(total_bytes + JMP_SHELLCODE_LEN)
+            .ok_or(InlineHookError::AllocationFailed)?;
         log::info!("Allocated trampoline memory at {:p}", memory.as_ptr());
 
         let block = InstructionBlock::new(&trampoline, memory.as_ptr() as _);
@@ -292,5 +324,16 @@ impl InlineHook {
 
     pub const fn handler_address(&self) -> u64 {
         self.handler
+    }
+}
+
+impl Drop for InlineHook {
+    fn drop(&mut self) {
+        if !self.mdl.is_null() {
+            unsafe {
+                MmUnlockPages(self.mdl);
+                IoFreeMdl(self.mdl);
+            };
+        }
     }
 }

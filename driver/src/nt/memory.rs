@@ -28,6 +28,12 @@ pub enum AllocType {
 pub struct AllocatedMemory<T>(NonNull<T>, AllocType);
 
 impl<T> AllocatedMemory<T> {
+    /// Allocates executable non paged memory.
+    pub fn alloc_executable(bytes: usize) -> Option<Self> {
+        // NonPagedPoolExecutable = NonPagedPool
+        Self::alloc(bytes)
+    }
+
     /// Allocates normal non paged memory.
     pub fn alloc(bytes: usize) -> Option<Self> {
         let memory = unsafe { ExAllocatePool(NonPagedPool, bytes) };

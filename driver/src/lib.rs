@@ -45,18 +45,18 @@ static LOGGER: KernelLogger = KernelLogger;
 static mut PROCESSORS: Option<Processors> = None;
 
 fn init_hooks() -> Option<Vec<Hook>> {
-    // // ZwQuerySystemInformation
-    // //
-    // let zwqsi_hook = Hook::hook_function(
-    //     "ZwQuerySystemInformation",
-    //     handlers::zw_query_system_information as *const (),
-    // )?;
-    // unsafe {
-    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-    //         HookType::Page => None,
-    //     };
-    // }
+    // ZwQuerySystemInformation
+    //
+    let zwqsi_hook = Hook::hook_function(
+        "ZwQuerySystemInformation",
+        handlers::zw_query_system_information as *const (),
+    )?;
+    unsafe {
+        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
+            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Page => None,
+        };
+    }
 
     // // ExAllocatePoolWithTag
     // //
@@ -84,7 +84,9 @@ fn init_hooks() -> Option<Vec<Hook>> {
         };
     }
 
-    Some(vec![mmiav_hook])
+    // FIXME: Currently only 1 hook is supported
+
+    Some(vec![zwqsi_hook])
 }
 
 fn virtualize_system() -> Option<()> {
@@ -119,8 +121,6 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
-
-    // TODO: Fix / find memory leak
 
     // TODO: Set this up.
     // com_logger::builder()

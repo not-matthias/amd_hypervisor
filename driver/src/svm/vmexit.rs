@@ -2,6 +2,7 @@ use crate::debug::dbg_break;
 use crate::nt::addresses::{physical_address, PhysicalAddress};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::nt::ptr::Pointer;
+use crate::nt::stack::return_address_by_rip;
 use crate::svm::data::guest::GuestRegisters;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
@@ -10,7 +11,7 @@ use crate::svm::paging::AccessType;
 use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
 use crate::HookType;
 use core::arch::asm;
-use nt::include::MmIsAddressValid;
+
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -173,78 +174,6 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
     }
 }
 
-/// Tries to find the return address based on the stack pointer.
-/// TODO: Move this to a different module.
-/// TODO: Checkout if `RtlVirtualUnwind ` is easier. @bright recommended it
-pub fn find_return_address(rsp: u64) -> Option<u64> {
-    const MAX_DEPTH: usize = 15;
-
-    for i in 0..MAX_DEPTH {
-        let stack_ptr = unsafe { (rsp as *mut u64).add(i) };
-        if unsafe { !MmIsAddressValid(stack_ptr as _) } {
-            continue;
-        }
-
-        let ret_addr = unsafe { stack_ptr.read_volatile() };
-        if ret_addr < 0x7FFF_FFFF_FFF || unsafe { !MmIsAddressValid(ret_addr as _) } {
-            continue;
-        }
-
-        let valid_opcode = |addr, opcode, opcode_size: isize| {
-            let opcode_ptr = unsafe { (addr as *mut u8).offset(-opcode_size) };
-            if unsafe { !MmIsAddressValid(opcode_ptr as _) } {
-                return None;
-            }
-
-            let opcode_value = unsafe { (addr as *mut u8).offset(-opcode_size).read_volatile() };
-            if opcode_value == opcode {
-                Some(addr)
-            } else {
-                None
-            }
-        };
-
-        // Call near, relative, displacement relative to next instruction. 32-bit displacement sign extended to 64-bits in 64-bit mode.
-        //
-        const REL_NEAR_OPCODE: u8 = 0xE8;
-        const REL_NEAR_SIZE: isize = 5;
-
-        if let Some(addr) = valid_opcode(ret_addr, REL_NEAR_OPCODE, REL_NEAR_SIZE) {
-            return Some(addr);
-        }
-
-        // Call near, absolute indirect, address given in r/m64.
-        //
-        const CALL_NEAR_ABS_IND_OPCODE: u8 = 0xFF;
-        const CALL_NEAR_ABS_IND_SIZE: isize = 2;
-        // TODO: Find example and
-
-        if let Some(addr) = valid_opcode(ret_addr, CALL_NEAR_ABS_IND_OPCODE, CALL_NEAR_ABS_IND_SIZE)
-        {
-            log::trace!("Found near indirect abs call at {:x}", addr);
-            return Some(addr);
-        }
-
-        // Call far, absolute indirect address given in m16:16.
-        //
-        // Example: `call    qword ptr [rax+28h]` (opcodes: `FF 50 28`)
-        //
-        const CALL_FAR_ABS_IND_OPCODE: u8 = 0xFF;
-        const CALL_FAR_ABS_IND_SIZE: isize = 3;
-
-        if let Some(addr) = valid_opcode(ret_addr, CALL_FAR_ABS_IND_OPCODE, CALL_FAR_ABS_IND_SIZE) {
-            log::trace!("Found far call at {:x}", addr);
-            return Some(addr);
-        }
-
-        // TODO: Check other calls
-        // https://hikalium.github.io/opv86/?q=call
-        // https://www.felixcloutier.com/x86/call
-    }
-
-    None
-}
-
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
@@ -295,25 +224,27 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
     {
         // Find the correct ret address
         //
-        // Why do we need to do this? Because there's certain situations where we don't use `call` to
+        // **Why do we need to do this?** Because there's certain situations where we don't use `call` to
         // jump to the code inside the page. If it's (un)-conditional jumps, then we don't have any
-        // options to detect where the caller came from.
+        // options to detect where the caller came from. The return address will also not always be
+        // at the top of the stack, because the caller can push their own data.
         //
+        // **Why can't we use rbp?** Because it's often used for other purposes. This is a very common optimization.
         //
-        // The guest might push data onto the stack, so we have to find the correct ret address.
-        // Hard coded for now: 0x48
+        // TODO: I'm not quite sure why we don't vmexit directly after the `call` instruction
         //
-        // Why can't we use rbp? Because it's often used for other purposes. This is a very common optimization.
-        //
-
-        let rsp = data.guest_vmcb.save_area.rsp;
-
-        let Some(return_address) = find_return_address(rsp) else {
+        let Some(return_address) = return_address_by_rip(data.guest_vmcb.save_area.rip) else {
             log::info!("Failed to find return address");
             dbg_break!();
             return ExitType::DoNothing;
         };
-        log::info!("Return address: {:x}", return_address);
+        log::info!("Rsp: {:x}", data.guest_vmcb.save_area.rsp);
+        log::info!(
+            "Return address for rip {:x}: {:x}",
+            data.guest_vmcb.save_area.rip,
+            return_address
+        );
+        dbg_break!();
         let return_address = PhysicalAddress::from_va(return_address)
             .align_down_to_base_page()
             .as_u64();

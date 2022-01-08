@@ -6,3 +6,4 @@ pub mod memory;
 pub mod physmem_descriptor;
 pub mod processor;
 pub mod ptr;
+pub mod stack;
