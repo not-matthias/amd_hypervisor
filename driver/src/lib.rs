@@ -11,6 +11,7 @@
 #![feature(const_ptr_as_ref)]
 #![feature(const_trait_impl)]
 #![allow(clippy::new_ret_no_self)]
+#![feature(int_abs_diff)]
 
 extern crate alloc;
 
@@ -47,35 +48,34 @@ static LOGGER: KernelLogger = KernelLogger;
 static mut PROCESSORS: Option<Processors> = None;
 
 fn init_hooks() -> Option<Vec<Hook>> {
-    // ZwQuerySystemInformation
-    //
-    let zwqsi_hook = Hook::hook_function(
-        "ZwQuerySystemInformation",
-        handlers::zw_query_system_information as *const (),
-    )?;
-    unsafe {
-        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => None,
-        };
-    }
-
-    // ExAllocatePool
-    //
-    // let eapwt_hook = Hook::hook_function(
-    //     "ExAllocatePoolWithTag",
-    //     handlers::ex_allocate_pool_with_tag as *const (),
+    // // ZwQuerySystemInformation
+    // //
+    // let zwqsi_hook = Hook::hook_function(
+    //     "ZwQuerySystemInformation",
+    //     handlers::zw_query_system_information as *const (),
     // )?;
     // unsafe {
-    //     handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
+    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
     //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-    //         HookType::Page => unreachable!(),
+    //         HookType::Page => None,
     //     };
     // }
 
-    // Currently not supported because of the minimalistic InlineHook implementation.
-    // // MmIsAddressValid
-    // //
+    // ExAllocatePoolWithTag
+    //
+    let eapwt_hook = Hook::hook_function(
+        "ExAllocatePoolWithTag",
+        handlers::ex_allocate_pool_with_tag as *const (),
+    )?;
+    unsafe {
+        handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
+            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Page => unreachable!(),
+        };
+    }
+
+    // MmIsAddressValid
+    //
     // let mmiav_hook = Hook::hook_function(
     //     "MmIsAddressValid",
     //     handlers::mm_is_address_valid as *const (),
@@ -87,7 +87,7 @@ fn init_hooks() -> Option<Vec<Hook>> {
     //     };
     // }
 
-    Some(vec![zwqsi_hook])
+    Some(vec![eapwt_hook])
 }
 
 fn virtualize_system() -> Option<()> {

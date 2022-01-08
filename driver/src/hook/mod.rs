@@ -115,7 +115,7 @@ impl Hook {
 
         // Install inline hook on the **copied** page (not the original one).
         //
-        let inline_hook = InlineHook::new(hook_va, handler)?;
+        let inline_hook = InlineHook::new(address, hook_va, handler)?;
 
         Some(Self {
             original_va: address,

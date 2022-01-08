@@ -1,13 +1,15 @@
 use crate::nt::inline_hook::InlineHook;
 use crate::nt::ptr::Pointer;
 
-use nt::include::{ZwQuerySystemInformation, SYSTEM_INFORMATION_CLASS};
+use nt::include::MmIsAddressValid;
+use winapi::km::wdm::POOL_TYPE::NonPagedPool;
 
 use crate::dbg_break;
+use crate::nt::include::{ExAllocatePoolWithTag, ExFreePool};
 use winapi::shared::ntdef::NTSTATUS;
 
 pub static mut ZWQSI_ORIGINAL: Option<Pointer<InlineHook>> = None;
-pub fn zw_query_system_information(
+pub extern "system" fn zw_query_system_information(
     system_information_class: u32,
     system_information: u64,
     system_information_length: u32,
@@ -84,16 +86,16 @@ pub fn test_hooks() {
 
     // Test zw_query_system_information
     //
-    log::info!("Testing zw_query_system_information.");
-    let status = unsafe {
-        ZwQuerySystemInformation(
-            SYSTEM_INFORMATION_CLASS::SystemProcessInformation,
-            0x0 as _,
-            0x0,
-            0x0 as _,
-        )
-    };
-    log::info!("zw_query_system_information returned {:x}.", status);
+    // log::info!("Testing zw_query_system_information.");
+    // let status = unsafe {
+    //     ZwQuerySystemInformation(
+    //         SYSTEM_INFORMATION_CLASS::SystemProcessInformation,
+    //         0x0 as _,
+    //         0x0,
+    //         0x0 as _,
+    //     )
+    // };
+    // log::info!("zw_query_system_information returned {:x}.", status);
 
     // Test ex_allocate_pool_with_tag
     //
@@ -107,9 +109,13 @@ pub fn test_hooks() {
     //
     // unsafe { ExFreePool(ptr as _) };
 
-    // Test MmIsAddressValid
+    // // Test MmIsAddressValid
+    // //
+    // dbg_break!();
     //
-    // unsafe { MmIsAddressValid(0 as _) };
+    // log::info!("Is address valid: {:?}", unsafe {
+    //     MmIsAddressValid(0 as _)
+    // });
 
     dbg_break!();
 }
