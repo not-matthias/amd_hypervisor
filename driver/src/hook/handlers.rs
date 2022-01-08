@@ -1,11 +1,6 @@
 use crate::nt::inline_hook::InlineHook;
 use crate::nt::ptr::Pointer;
-
 use nt::include::MmIsAddressValid;
-use winapi::km::wdm::POOL_TYPE::NonPagedPool;
-
-use crate::dbg_break;
-use crate::nt::include::{ExAllocatePoolWithTag, ExFreePool};
 use winapi::shared::ntdef::NTSTATUS;
 
 pub static mut ZWQSI_ORIGINAL: Option<Pointer<InlineHook>> = None;
@@ -64,8 +59,6 @@ pub static mut MMIAV_ORIGINAL: Option<Pointer<InlineHook>> = None;
 pub fn mm_is_address_valid(ptr: u64) -> bool {
     log::info!("Called mm_is_address_valid({:x})", ptr);
 
-    dbg_break!();
-
     // Call original
     //
     let fn_ptr = unsafe {
@@ -82,8 +75,6 @@ pub fn mm_is_address_valid(ptr: u64) -> bool {
 #[link_section = ".custom$test_hooks"]
 #[inline(never)]
 pub fn test_hooks() {
-    log::info!("Testing hooks.");
-
     // Test zw_query_system_information
     //
     // log::info!("Testing zw_query_system_information.");
@@ -109,13 +100,9 @@ pub fn test_hooks() {
     //
     // unsafe { ExFreePool(ptr as _) };
 
-    // // Test MmIsAddressValid
-    // //
-    // dbg_break!();
+    // Test MmIsAddressValid
     //
-    // log::info!("Is address valid: {:?}", unsafe {
-    //     MmIsAddressValid(0 as _)
-    // });
-
-    dbg_break!();
+    log::info!("Is address valid: {:?}", unsafe {
+        MmIsAddressValid(0 as _)
+    });
 }

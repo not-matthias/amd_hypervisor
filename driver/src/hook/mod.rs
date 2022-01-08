@@ -56,7 +56,7 @@ impl Hook {
     ///
     /// For more information, see the official docs:https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/when-should-code-and-data-be-pageable-
     fn copy_page(address: u64) -> Option<AllocatedMemory<u8>> {
-        log::info!("Creating a copy of the page at {:#x}", address);
+        log::info!("Creating a copy of the page");
 
         let page_address = PAddr::from(address).align_down_to_base_page();
         if page_address.is_zero() {
@@ -210,6 +210,17 @@ impl HookedNpt {
             let hook_pa = hook.original_pa.align_down_to_base_page();
 
             if hook_pa == faulting_pa {
+                return Some(hook);
+            }
+        }
+
+        None
+    }
+
+    /// Tries to find a hook for the specified hook virtual address.
+    pub fn find_hook_by_address(&self, address: u64) -> Option<&Hook> {
+        for hook in self.hooks.iter() {
+            if hook.original_va == address {
                 return Some(hook);
             }
         }

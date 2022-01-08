@@ -179,7 +179,7 @@ impl NestedPageTable {
     /// See:
     /// - https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L245
     pub fn split_2mb_to_4kb(&mut self, guest_pa: u64) -> Option<()> {
-        log::info!("Splitting 2mb page into 4kb pages: {:x}", guest_pa);
+        log::trace!("Splitting 2mb page into 4kb pages: {:x}", guest_pa);
 
         let guest_pa = VAddr::from(guest_pa);
 
@@ -191,7 +191,7 @@ impl NestedPageTable {
         // If it's a page directory, it is already split.
         //
         if !pd_entry.is_page() {
-            log::info!("Page is already split: {:x}.", guest_pa);
+            log::trace!("Page is already split: {:x}.", guest_pa);
             return Some(());
         }
 
@@ -392,7 +392,7 @@ impl NestedPageTable {
 
     /// Changes the permission of a single page (can be 2mb or 4kb).
     pub fn change_page_permission(&mut self, guest_pa: u64, host_pa: u64, permission: AccessType) {
-        log::info!(
+        log::trace!(
             "Changing permission of guest page {:#x} to {:?}",
             guest_pa,
             permission

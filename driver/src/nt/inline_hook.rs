@@ -1,14 +1,14 @@
 use crate::nt::include::RtlCopyMemory;
 use crate::nt::memory::AllocatedMemory;
+use alloc::vec;
 use alloc::vec::Vec;
-use core::arch::x86_64::_mm_clflush;
 use iced_x86::{
-    BlockEncoder, BlockEncoderOptions, Code, Decoder, DecoderOptions, FlowControl, Instruction,
-    InstructionBlock, Register,
+    BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, InstructionBlock,
 };
 use snafu::prelude::*;
 
 pub const JMP_SHELLCODE_LEN: usize = 14;
+pub const BP_SHELLCODE_LEN: usize = 1;
 
 #[derive(Debug, Snafu)]
 pub enum InlineHookError {
@@ -26,60 +26,111 @@ pub enum InlineHookError {
 
     #[snafu(display("Failed to encode trampoline"))]
     EncodingFailed,
+
+    #[snafu(display("Found rip-relative instruction which is not supported"))]
+    RelativeInstruction,
+
+    #[snafu(display("Found unsupported instruction"))]
+    UnsupportedInstruction,
 }
 
+pub enum HookType {
+    Jmp,
+    Breakpoint,
+}
+
+// TODO: Could we detect when the hook calls the trampoline? Because then we know that the hook is finished and we can hide it again.
+// TODO: Rename this to ShadowHook or ShadowInlineHook, because it's not entirely an inline hook.
+//      Or maybe restructure it so that don't have to pass two addresses (real page, shadow page).
+//      Or maybe switch it in advance and then unswitch it again. So then we could apply it directly to the shadow page.
 pub struct InlineHook {
     trampoline: AllocatedMemory<u8>,
 
-    address: u64,
+    /// Original address of the function (real page)
+    original_address: u64,
+    /// Address where the inline hook has been written to (shadow page)
+    hook_address: u64,
     handler: u64,
 
+    hook_type: HookType,
     enabled: bool,
 }
 
 impl InlineHook {
     /// Creates a new inline hook (not yet enabled) for the specified function.
     ///
+    /// ## Parameters
+    ///
+    ///
     ///
     /// ## Note
     ///
     /// Note: We have to allocate a new instance here, so that it's valid after the virtualization. Otherwise,
     /// all the addresses would be 0x0.
-    ///
-    /// TODO: Can we somehow get rid of the original address?
     pub fn new(
         original_address: u64,
-        address: u64,
+        hook_address: u64,
         handler: *const (),
     ) -> Option<AllocatedMemory<Self>> {
         log::info!(
             "Creating a new inline hook. Address: {:x}, handler: {:x}",
-            address,
+            hook_address,
             handler as u64
         );
 
-        let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
-        hook.trampoline = match Self::trampoline_shellcode(original_address, address as u64) {
-            Ok(trampoline) => trampoline,
-            Err(e) => {
-                log::error!("Failed to create trampoline: {:?}", e);
-                return None;
+        // Create the different trampolines. There's a few different ones available:
+        // - 1 Byte: CC shellcode
+        // - 14 Bytes: JMP shellcode
+        //
+        let (hook_type, trampoline) = match Self::trampoline_shellcode(
+            original_address,
+            hook_address as u64,
+            JMP_SHELLCODE_LEN,
+        ) {
+            Ok(trampoline) => (HookType::Jmp, trampoline),
+            Err(error) => {
+                log::warn!("Failed to create jmp trampoline: {:?}", error);
+
+                // If jmp trampoline didn't work, let's try this one:
+                //
+                let trampoline = Self::trampoline_shellcode(
+                    original_address,
+                    hook_address as u64,
+                    BP_SHELLCODE_LEN,
+                )
+                .map_err(|e| {
+                    log::warn!("Failed to create bp trampoline: {:?}", e);
+                    e
+                })
+                .ok()?;
+
+                (HookType::Breakpoint, trampoline)
             }
         };
+
+        //
+        //
+        let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
+        hook.trampoline = trampoline;
+        hook.hook_type = hook_type;
         hook.enabled = false;
-        hook.address = address;
+        hook.hook_address = hook_address;
+        hook.original_address = original_address;
         hook.handler = handler as u64;
 
         Some(hook)
     }
 
     pub fn enable(&self) {
-        let jmp_to_handler = Self::jmp_shellcode(self.handler);
+        let jmp_to_handler = match self.hook_type {
+            HookType::Jmp => Self::jmp_shellcode(self.handler).to_vec(),
+            HookType::Breakpoint => vec![0xCC_u8],
+        };
+
         log::info!(
-            "Writing the shellcode {:x?} to {:p} (size = {:?}).",
+            "Writing the shellcode {:x?} to {:p}",
             jmp_to_handler,
             self.trampoline_address(),
-            jmp_to_handler.len()
         );
 
         // Note: In order for this to work, we have to use an heap allocated instance instead of
@@ -88,15 +139,11 @@ impl InlineHook {
         //
         unsafe {
             RtlCopyMemory(
-                self.address as *mut u64,
+                self.hook_address as *mut u64,
                 jmp_to_handler.as_ptr() as _,
-                JMP_SHELLCODE_LEN,
+                jmp_to_handler.len(),
             );
         }
-    }
-
-    pub fn trampoline_address(&self) -> *mut u64 {
-        self.trampoline.as_ptr() as _
     }
 
     /// Creates the jmp shellcode.
@@ -144,34 +191,44 @@ impl InlineHook {
 
     /// Creates a trampoline shellcode that jumps to the original function.
     ///
+    /// NOTE: The trampoline doesn't support RIP-relative instructions. If any of these relative instructions
+    /// are found, `InlineHookError::RelativeInstruction` will be returned.
+    ///
     /// ## Parameters
     ///
-    /// - `original_address`: The address of the original function. We need this so that we can relocate potential jumps that have been overwritten by the hook.
-    /// - `function_address`: The address of same function in the copied page.
+    /// - `original_address`: The address of the original function (on the real page).
+    /// - `address`: The address of function in the copied page.
+    /// - `size`: The minimum size of the trampoline.
     ///
-    /// TODO: Replace one of these parameters
+    /// ## Returns
+    ///
+    /// The trampoline shellcode.
+    ///
     fn trampoline_shellcode(
         original_address: u64,
-        function_address: u64,
+        address: u64,
+        required_size: usize,
     ) -> Result<AllocatedMemory<u8>, InlineHookError> {
-        log::info!(
-            "Creating the trampoline shellcode for function: {:#x}",
-            function_address
-        );
+        log::info!("Creating the trampoline for function: {:#x}", address);
 
         // Read bytes from function and decode them. Read 2 times the amount needed, in case there are
-        // bigger instructions that take more space.
+        // bigger instructions that take more space. If there's only 1 byte needed, we read 15 bytes
+        // instead so that we can find the first few valid instructions.
         //
         let bytes = unsafe {
-            core::slice::from_raw_parts(function_address as *mut u8, JMP_SHELLCODE_LEN * 2)
+            core::slice::from_raw_parts(address as *mut u8, usize::max(required_size * 2, 15))
         };
-        let mut decoder = Decoder::with_ip(64, &bytes, original_address, DecoderOptions::NONE);
+        let mut decoder = Decoder::with_ip(64, &bytes, address, DecoderOptions::NONE);
 
         let mut total_bytes = 0;
         let mut trampoline = Vec::new();
         for instr in &mut decoder {
             if instr.is_invalid() {
                 return Err(InlineHookError::InvalidBytes);
+            }
+
+            if total_bytes >= required_size {
+                break;
             }
 
             // Create the new trampoline instruction
@@ -181,46 +238,20 @@ impl InlineHook {
                     total_bytes += instr.len();
                     trampoline.push(instr);
                 }
-                FlowControl::Call => {
-                    if instr.is_call_near() {
-                        total_bytes += instr.len();
-
-                        let branch_target = instr.near_branch_target();
-
-                        // TODO: Just relocate the relative jump
-
-                        // mov rax, branch_target
-                        // jmp rax
-                        //
-                        // let mov_rax =
-                        //     Instruction::with2(Code::Mov_r64_imm64, Register::RAX, branch_target)
-                        //         .unwrap();
-                        // let jmp_rax = Instruction::with1(Code::Jmp_rm64, Register::RAX).unwrap();
-                        //
-                        // trampoline.push(mov_rax);
-                        // trampoline.push(jmp_rax);
-                        trampoline.push(
-                            Instruction::with_branch(Code::Jmp_rel32_64, branch_target).unwrap(),
-                        );
-                    } else {
-                        log::warn!("Found call far");
-                    }
-                }
-                FlowControl::IndirectBranch
+                FlowControl::Call
                 | FlowControl::ConditionalBranch
                 | FlowControl::UnconditionalBranch
-                | FlowControl::IndirectCall
+                | FlowControl::IndirectCall => {
+                    return Err(InlineHookError::RelativeInstruction);
+                }
+                FlowControl::IndirectBranch
                 | FlowControl::Interrupt
                 | FlowControl::XbeginXabortXend
-                | FlowControl::Exception => log::warn!("Unsupported instruction"),
+                | FlowControl::Exception => return Err(InlineHookError::UnsupportedInstruction),
             };
-
-            if total_bytes >= JMP_SHELLCODE_LEN {
-                break;
-            }
         }
 
-        if total_bytes < JMP_SHELLCODE_LEN {
+        if total_bytes < required_size {
             return Err(InlineHookError::NotEnoughBytes);
         }
 
@@ -228,42 +259,38 @@ impl InlineHook {
             return Err(InlineHookError::NoInstructions);
         }
 
-        // Create a jmp instruction at the end of the trampoline, back to the original function. We
-        // don't need to do that, if there's already a return instruction.
-        //
-        let last_instr = trampoline.last().unwrap();
-        let jmp_back_address = last_instr.next_ip();
-        if last_instr.flow_control() != FlowControl::Return {
-            log::info!(
-                "Creating jmp back to original instructions at {:#x}",
-                jmp_back_address
-            );
-            trampoline
-                .push(Instruction::with_branch(Code::Jmp_rel32_64, jmp_back_address).unwrap());
-        }
-
         // Allocate new memory for the trampoline and encode the instructions.
         //
         let memory = AllocatedMemory::<u8>::alloc(total_bytes)
             .ok_or_else(|| InlineHookError::AllocationFailed)?;
-
         log::info!("Allocated trampoline memory at {:p}", memory.as_ptr());
-        log::info!(
-            "Offset between original and trampoline: {:#x}",
-            function_address.abs_diff(memory.as_ptr() as u64)
-        );
 
         let block = InstructionBlock::new(&trampoline, memory.as_ptr() as _);
-        let encoded = BlockEncoder::encode(decoder.bitness(), block, BlockEncoderOptions::NONE)
+        let mut encoded = BlockEncoder::encode(decoder.bitness(), block, BlockEncoderOptions::NONE)
             .map(|b| b.code_buffer)
             .map_err(|_| InlineHookError::EncodingFailed)?;
-
         log::info!("Encoded trampoline: {:x?}", encoded);
+
+        // Add jmp to the original function at the end. We can't use `address` for this, because
+        // the page will probably contain rip-relative instructions. And we already switch the page
+        // So the shadow page will be at the address of the original page.
+        //
+        let jmp_back_address = original_address + encoded.len() as u64;
+        let jmp_shellcode = Self::jmp_shellcode(jmp_back_address);
+        encoded.extend_from_slice(jmp_shellcode.as_slice());
 
         // Copy the encoded bytes and return the allocated memory.
         //
         unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), memory.as_ptr(), encoded.len()) };
 
         Ok(memory)
+    }
+
+    pub const fn trampoline_address(&self) -> *mut u64 {
+        self.trampoline.as_ptr() as _
+    }
+
+    pub const fn handler_address(&self) -> u64 {
+        self.handler
     }
 }

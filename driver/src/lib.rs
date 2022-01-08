@@ -15,14 +15,11 @@
 
 extern crate alloc;
 
-use self::hook::testing;
 use crate::debug::dbg_break;
 use crate::hook::{handlers, Hook, HookType};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
-
-use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
-
 use crate::nt::inline_hook::InlineHook;
+use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
 use crate::nt::ptr::Pointer;
 use crate::svm::Processors;
 use alloc::vec;
@@ -61,33 +58,33 @@ fn init_hooks() -> Option<Vec<Hook>> {
     //     };
     // }
 
-    // ExAllocatePoolWithTag
-    //
-    let eapwt_hook = Hook::hook_function(
-        "ExAllocatePoolWithTag",
-        handlers::ex_allocate_pool_with_tag as *const (),
-    )?;
-    unsafe {
-        handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => unreachable!(),
-        };
-    }
-
-    // MmIsAddressValid
-    //
-    // let mmiav_hook = Hook::hook_function(
-    //     "MmIsAddressValid",
-    //     handlers::mm_is_address_valid as *const (),
+    // // ExAllocatePoolWithTag
+    // //
+    // let eapwt_hook = Hook::hook_function(
+    //     "ExAllocatePoolWithTag",
+    //     handlers::ex_allocate_pool_with_tag as *const (),
     // )?;
     // unsafe {
-    //     handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
+    //     handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
     //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
     //         HookType::Page => unreachable!(),
     //     };
     // }
 
-    Some(vec![eapwt_hook])
+    // MmIsAddressValid
+    //
+    let mmiav_hook = Hook::hook_function(
+        "MmIsAddressValid",
+        handlers::mm_is_address_valid as *const (),
+    )?;
+    unsafe {
+        handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
+            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Page => unreachable!(),
+        };
+    }
+
+    Some(vec![mmiav_hook])
 }
 
 fn virtualize_system() -> Option<()> {
@@ -138,11 +135,10 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
     // Initialize the hook testing
     //
 
-    testing::init();
-
-    testing::print_shellcode();
-    testing::call_shellcode();
-    testing::print_shellcode();
+    // testing::init();
+    // testing::print_shellcode();
+    // testing::call_shellcode();
+    // testing::print_shellcode();
 
     // Print physical memory pages
     //
@@ -192,9 +188,9 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
             // Call the hook again after initialization
             //
-            testing::print_shellcode();
-            testing::call_shellcode();
-            testing::print_shellcode();
+            // testing::print_shellcode();
+            // testing::call_shellcode();
+            // testing::print_shellcode();
 
             handlers::test_hooks();
 

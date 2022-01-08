@@ -49,7 +49,6 @@ impl EventInjection {
         let mut event = EventInjection(0);
         event.set_vector(3); // #BP
         event.set_type(3); // Exception
-        event.set_error_code_valid(1);
         event.set_valid(1);
 
         event

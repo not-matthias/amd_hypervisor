@@ -81,10 +81,8 @@ impl ProcessorData {
         // we need to redirect the execution to our hook handlers. The breakpoint will be
         // placed on the original instruction.
         //
-        // unsafe {
-        //     (*self.ptr()).guest_vmcb.control_area.intercept_exception |= 1 << 3;
-        //     // TODO: Create bitflags for this
-        // }
+        self.guest_vmcb.control_area.intercept_exception |= 1 << 3;
+        // TODO: Create bitflags for this
 
         // Configure which instructions to intercept
         //

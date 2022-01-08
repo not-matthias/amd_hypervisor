@@ -6,11 +6,11 @@ use crate::svm::data::guest::GuestRegisters;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
 use crate::svm::events::EventInjection;
+use crate::svm::paging::AccessType;
 use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
+use crate::HookType;
 use core::arch::asm;
 use nt::include::MmIsAddressValid;
-
-use crate::svm::paging::AccessType;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -148,13 +148,29 @@ pub fn handle_vmrun(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitTyp
 }
 
 pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
-    // TODO:
-    // - Find hook entry for the address (current rip)
-    // - Set rip to the hook handler otherwise inject #BP
+    let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
-    EventInjection::bp().inject(data);
+    // Find the handler address for the current instruction pointer (RIP) and transfer the execution
+    // to it. If we couldn't find a hook, we inject the #BP exception.
+    //
+    if let Some(Some(handler)) = hooked_npt
+        .find_hook_by_address(data.guest_vmcb.save_area.rip)
+        .map(|hook| {
+            if let HookType::Function { inline_hook } = &hook.hook_type {
+                Some(inline_hook.handler_address())
+            } else {
+                None
+            }
+        })
+    {
+        data.guest_vmcb.save_area.rip = handler;
 
-    ExitType::DoNothing
+        ExitType::DoNothing
+    } else {
+        EventInjection::bp().inject(data);
+
+        ExitType::IncrementRIP
+    }
 }
 
 /// Tries to find the return address based on the stack pointer.
@@ -182,7 +198,6 @@ pub fn find_return_address(rsp: u64) -> Option<u64> {
 
             let opcode_value = unsafe { (addr as *mut u8).offset(-opcode_size).read_volatile() };
             if opcode_value == opcode {
-                log::info!("Found near call at {:x}", addr - opcode_size as u64);
                 Some(addr)
             } else {
                 None
@@ -206,7 +221,7 @@ pub fn find_return_address(rsp: u64) -> Option<u64> {
 
         if let Some(addr) = valid_opcode(ret_addr, CALL_NEAR_ABS_IND_OPCODE, CALL_NEAR_ABS_IND_SIZE)
         {
-            log::info!("Found near indirect abs call at {:x}", addr);
+            log::trace!("Found near indirect abs call at {:x}", addr);
             return Some(addr);
         }
 
@@ -218,7 +233,7 @@ pub fn find_return_address(rsp: u64) -> Option<u64> {
         const CALL_FAR_ABS_IND_SIZE: isize = 3;
 
         if let Some(addr) = valid_opcode(ret_addr, CALL_FAR_ABS_IND_OPCODE, CALL_FAR_ABS_IND_SIZE) {
-            log::info!("Found far call at {:x}", addr);
+            log::trace!("Found far call at {:x}", addr);
             return Some(addr);
         }
 
@@ -233,10 +248,6 @@ pub fn find_return_address(rsp: u64) -> Option<u64> {
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
-    // TODO: Can we check if the guest called the hook function?
-    //          If not, what should we do?
-    //          If yes, we can parse the RET address.
-    //
     // TODO: Make sure there's no way to scan physical memory to find the hook
     //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
     //
