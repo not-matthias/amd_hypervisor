@@ -30,12 +30,11 @@ obfstr = "0.3.0"
 elain = "0.3.0"
 bitflags = "1.3.2"
 bitfield = "0.13.2"
+x86 = "0.44.0"
 x86_64 = { version = "0.14.7", features = ["nightly", "const_fn", "abi_x86_interrupt", "instructions"] }
-x86 = { version = "0.44.0" }
-winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", features = ["wdm", "ntstatus"] }
 once_cell = { version = "1.9.0", default-features = false, features = ["unstable", "alloc"] }
-#iced-x86 = { version = "1.15.0", default-features = false, features = ["no_std", "decoder", "block_encoder", "encoder", "instr_info", "no_d3now", "no_evex", "no_vex", "no_xop"] }
-iced-x86 = { path = "C:/Users/not-matthias/Documents/iced/src/rust/iced-x86", default-features = false, features = ["no_std", "decoder", "block_encoder", "instr_info", "no_d3now", "no_evex", "no_vex", "no_xop", "fast_fmt"] }
+iced-x86 = { git = "https://github.com/icedland/iced", branch = "nohashmap", default-features = false, features = ["no_std", "decoder", "block_encoder", "instr_info", "no_d3now", "no_evex", "no_vex", "no_xop", "fast_fmt"] }
+winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", features = ["wdm", "ntstatus"] }
 
 [profile.release]
 lto = "thin"    # IMPORTANT: "fat" doesn't work and will result in an access violation
@@ -44,6 +43,3 @@ debug = true
 panic = "abort"
 overflow-checks = false
 debug-assertions = false
-
-[patch.crates-io]
-ahash = { git = "https://github.com/tkaitchuck/aHash", branch = "simplification" }
