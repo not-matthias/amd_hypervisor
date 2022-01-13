@@ -1,5 +1,7 @@
 use crate::nt::addresses::PhysicalAddress;
 
+use core::ops::{BitOrAssign};
+
 use x86::bits64::paging::{PDFlags, PDPTFlags, PML4Entry, PTFlags, MAXPHYADDR};
 
 pub const _512GB: u64 = 512 * 1024 * 1024 * 1024;
@@ -13,11 +15,17 @@ pub const PAGE_SIZE: usize = 0x1000;
 pub const PAGE_MASK: usize = !(PAGE_SIZE - 1);
 pub const PFN_MASK: u64 = ((1 << MAXPHYADDR) - 1) & !0xfff;
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 pub enum AccessType {
     ReadWrite,
     ReadWriteExecute,
 }
+
+// Bit 1: RW
+// Bit 63: NX
+//
+const RW: u64 = 0b1;
+const NX: u64 = 0b1 << 63;
 
 impl AccessType {
     pub fn get_1gb(&self, mut flags: PDPTFlags) -> PDPTFlags {
@@ -63,6 +71,23 @@ impl AccessType {
         }
 
         flags
+    }
+}
+
+impl BitOrAssign<AccessType> for u64 {
+    fn bitor_assign(&mut self, rhs: AccessType) {
+        // Insert: self |= other;
+        // Remove: self &= !other;
+        //
+        match rhs {
+            AccessType::ReadWrite => {
+                *self |= RW | NX;
+            }
+            AccessType::ReadWriteExecute => {
+                *self |= RW;
+                *self &= !NX;
+            }
+        }
     }
 }
 

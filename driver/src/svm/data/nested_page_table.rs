@@ -127,8 +127,6 @@ impl NestedPageTable {
             npt.map_2mb(pa, pa, AccessType::ReadWriteExecute);
         }
 
-        npt.last_pdp_index();
-
         Some(npt)
     }
 
@@ -171,6 +169,9 @@ impl NestedPageTable {
         Some(npt)
     }
 
+    //
+    //
+
     /// Splits a large 2MB page into 512 smaller 4KB pages.
     ///
     /// This is needed to apply more granular hooks and to reduce the number of page faults
@@ -203,9 +204,6 @@ impl NestedPageTable {
         //
         for i in 0..PAGE_SIZE_ENTRIES {
             let address = guest_pa.as_usize() + i * BASE_PAGE_SIZE;
-
-            log::trace!("Mapping 4kb page: {:x}", address);
-
             self.map_4kb(address as _, address as _, AccessType::ReadWriteExecute);
         }
     }
@@ -243,16 +241,28 @@ impl NestedPageTable {
         Some(())
     }
 
-    pub fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
-        // TODO: Use access_type
-        let _ = access_type;
+    //
+    //
 
-        let guest_pa = VAddr::from(guest_pa);
-        let host_pa = VAddr::from(host_pa);
+    fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+        self.map_pml4(guest_pa, access_type);
+        self.map_pdpt(guest_pa, access_type);
+        self.map_pde(guest_pa, host_pa, access_type);
+    }
+
+    fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+        self.map_pml4(guest_pa, access_type);
+        self.map_pdpt(guest_pa, access_type);
+        self.map_pdt(guest_pa, access_type);
+        self.map_pt(guest_pa, host_pa, access_type);
+    }
+
+    fn map_pml4(&mut self, guest_pa: u64, access_type: AccessType) {
+        let _ = access_type; // TODO: Use this
 
         // PML4 (512 GB)
         //
-        let pml4_index = pml4_index(guest_pa);
+        let pml4_index = pml4_index(VAddr::from(guest_pa));
         let pml4_entry = &mut self.pml4[pml4_index];
 
         if !pml4_entry.is_present() {
@@ -261,10 +271,12 @@ impl NestedPageTable {
                 PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
             );
         }
+    }
 
-        // PDPT (1 GB)
-        //
-        let pdpt_index = pdpt_index(guest_pa);
+    fn map_pdpt(&mut self, guest_pa: u64, access_type: AccessType) {
+        let _ = access_type; // TODO: Use this
+
+        let pdpt_index = pdpt_index(VAddr::from(guest_pa));
         let pdpt_entry = &mut self.pdp_entries[pdpt_index];
 
         if !pdpt_entry.is_present() {
@@ -274,10 +286,30 @@ impl NestedPageTable {
                 PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]),
             );
         }
+    }
 
-        // PD (2 MB)
-        //
-        let pd_index = pd_index(guest_pa);
+    fn map_pdt(&mut self, guest_pa: u64, access_type: AccessType) {
+        let _ = access_type; // TODO: Use this
+
+        let pdpt_index = pdpt_index(VAddr::from(guest_pa));
+        let pd_index = pd_index(VAddr::from(guest_pa));
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+
+        if !pd_entry.is_present() {
+            let pa = physical_address(self.pt_entries[pdpt_index][pd_index].as_ptr() as _);
+
+            *pd_entry = PDEntry::new(
+                pa,
+                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US]),
+            );
+        }
+    }
+
+    fn map_pde(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+        let _ = access_type; // TODO: Use this
+
+        let pdpt_index = pdpt_index(VAddr::from(guest_pa));
+        let pd_index = pd_index(VAddr::from(guest_pa));
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
 
         if !pd_entry.is_present() {
@@ -285,61 +317,18 @@ impl NestedPageTable {
             // to calculate it on our own. Just pass it to the page directory entry.
             //
             *pd_entry = PDEntry::new(
-                PAddr::from(host_pa.as_u64()),
+                PAddr::from(host_pa),
                 PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::PS]),
             );
         }
     }
 
-    // TODO: Make it more granular and merge duplicated code
-    pub fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
-        // TODO: Use access_type
-        let _ = access_type;
-
-        let guest_pa = VAddr::from(guest_pa);
-        let host_pa = VAddr::from(host_pa);
-
-        // PML4 (512 GB)
-        //
-        let pml4_index = pml4_index(guest_pa);
-        let pml4_entry = &mut self.pml4[pml4_index];
-
-        if !pml4_entry.is_present() {
-            *pml4_entry = PML4Entry::new(
-                physical_address(self.pdp_entries.as_ptr() as _),
-                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US]),
-            );
-        }
-
-        // PDPT (1 GB)
-        //
-        let pdpt_index = pdpt_index(guest_pa);
-        let pdpt_entry = &mut self.pdp_entries[pdpt_index];
-
-        if !pdpt_entry.is_present() {
-            let pa = physical_address(self.pd_entries[pdpt_index].as_ptr() as _);
-            *pdpt_entry = PDPTEntry::new(
-                pa,
-                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US]),
-            );
-        }
-
-        // PD (2 MB)
-        //
-        let pd_index = pd_index(guest_pa);
-        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
-
-        if !pd_entry.is_present() {
-            let pa = physical_address(self.pt_entries[pdpt_index][pd_index].as_ptr() as _);
-            *pd_entry = PDEntry::new(
-                pa,
-                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US]),
-            );
-        }
-
+    fn map_pt(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         // PT (4 KB)
         //
-        let pt_index = pt_index(guest_pa);
+        let pdpt_index = pdpt_index(VAddr::from(guest_pa));
+        let pd_index = pd_index(VAddr::from(guest_pa));
+        let pt_index = pt_index(VAddr::from(guest_pa));
         let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
 
         if !pt_entry.is_present() {
@@ -352,6 +341,9 @@ impl NestedPageTable {
             );
         }
     }
+
+    //
+    //
 
     fn unmap_2mb(entry: &mut PDEntry) {
         if !entry.is_present() {
@@ -370,17 +362,20 @@ impl NestedPageTable {
         Self::unmap_2mb(entry);
     }
 
+    //
+    //
+
+    pub fn set_all_pages_to_rw(&mut self) -> Option<()> {
+        //
+        todo!()
+    }
+
     /// Changes the permissions for all pdp entries.
     pub fn change_all_permissions(&mut self, permission: AccessType) -> Option<()> {
         // TODO: Do we need to change the permissions of PT?
 
         for i in 0..=self.last_pdp_index() {
-            let pdp_entry = &mut self.pdp_entries[i];
-
-            let flags = permission.get_1gb(pdp_entry.flags());
-            let entry = PDPTEntry::new(pdp_entry.address(), flags);
-
-            *pdp_entry = entry;
+            self.pdp_entries[i].0 |= permission;
         }
 
         // TODO: Make subtables executable when setting RWX?
@@ -512,19 +507,7 @@ impl NestedPageTable {
         );
     }
 
-    // TODO: Not yet working. Fix it.
     pub fn last_pdp_index(&self) -> usize {
-        let desc = PhysicalMemoryDescriptor::new();
-
-        // TODO: I'm not 100% confident that the last pdp index is correct. Do we have to round up?
-        //
-        desc.total_size_in_gb() + 1
+        PhysicalMemoryDescriptor::new().total_size_in_gb() + 1
     }
-
-    // TODO:
-    // - Map 4kb guest physical address to 4kb host physical address (hooked) and vice versa
-    // - Change permissions of other pages to RW and vice versa
-    //    - Are there optimizations? Only borders/outside memory?
-
-    // IMPORTANT: Can we cache it somehow?
 }
