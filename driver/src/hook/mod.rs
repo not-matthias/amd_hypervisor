@@ -182,7 +182,7 @@ impl HookedNpt {
                 inline_hook.enable()
             }
 
-            self.npt.split_2mb_to_4kb(large_page_base)?;
+            self.npt.split_2mb_to_4kb(large_page_base);
             self.npt
                 .change_page_permission(base_page_base, base_page_base, AccessType::ReadWrite);
         }

@@ -2,7 +2,7 @@ use crate::debug::dbg_break;
 use crate::nt::addresses::{physical_address, PhysicalAddress};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::nt::ptr::Pointer;
-use crate::nt::stack::return_address_by_rip;
+use crate::nt::stack::{find_return_addresses, return_address_by_rip, top_return_address};
 use crate::svm::data::guest::GuestRegisters;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
@@ -12,6 +12,8 @@ use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
 use crate::HookType;
 use core::arch::asm;
 
+use crate::hook::HookedNpt;
+use crate::nt::memory::AllocatedMemory;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -174,7 +176,7 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
     }
 }
 
-pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
+pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
     // TODO: Make sure there's no way to scan physical memory to find the hook
@@ -233,21 +235,8 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
         //
         // TODO: I'm not quite sure why we don't vmexit directly after the `call` instruction
         //
-        let Some(return_address) = return_address_by_rip(data.guest_vmcb.save_area.rip) else {
-            log::info!("Failed to find return address");
-            dbg_break!();
-            return ExitType::DoNothing;
-        };
-        log::info!("Rsp: {:x}", data.guest_vmcb.save_area.rsp);
-        log::info!(
-            "Return address for rip {:x}: {:x}",
-            data.guest_vmcb.save_area.rip,
-            return_address
-        );
-        dbg_break!();
-        let return_address = PhysicalAddress::from_va(return_address)
-            .align_down_to_base_page()
-            .as_u64();
+        log::info!("RIP: {:x}", data.guest_vmcb.save_area.rip);
+        log::info!("RSP: {:x}", data.guest_vmcb.save_area.rsp);
 
         log::info!("==> Showing the hooks");
         hooked_npt.npt.change_page_permission(
@@ -255,12 +244,67 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _: &mut GuestRegisters
             hooked_page_pa,
             AccessType::ReadWriteExecute,
         );
-        let _ = hooked_npt.npt.split_2mb_to_4kb(return_address);
-        hooked_npt.npt.change_page_permission(
-            return_address,
-            return_address,
-            AccessType::ReadWrite,
-        );
+
+        // Set return_address to RW
+        //
+        let protect_ret_addr = |hooked_npt: &mut AllocatedMemory<HookedNpt>, return_address| {
+            let return_address = PhysicalAddress::from_va(return_address)
+                .align_down_to_base_page()
+                .as_u64();
+
+            let _ = hooked_npt.npt.split_2mb_to_4kb(return_address);
+            hooked_npt.npt.change_page_permission(
+                return_address,
+                return_address,
+                AccessType::ReadWrite,
+            );
+        };
+
+        // 1. Use RtlVirtualUnwind to find the return address
+        let Some(return_address) = return_address_by_rip(data.guest_vmcb.save_area.rip) else {
+            dbg_break!();
+            return ExitType::DoNothing;
+        };
+        log::info!("Return address: {:x?}", return_address);
+        protect_ret_addr(hooked_npt, return_address);
+
+        // 2. Use the first stack element as return address
+        if let Some(return_address) = top_return_address(data.guest_vmcb.save_area.rsp) {
+            log::info!("Top stack return address: {:x?}", return_address);
+            protect_ret_addr(hooked_npt, return_address);
+        }
+
+        if let Some(return_addresses) = find_return_addresses(data.guest_vmcb.save_area.rsp) {
+            log::info!("Manual return address: {:x?}", return_addresses);
+
+            for return_address in return_addresses {
+                protect_ret_addr(hooked_npt, return_address);
+            }
+        }
+
+        // // Set the tramplines to RW
+        // //
+        // let trampolines = hooked_npt
+        //     .hooks
+        //     .iter()
+        //     .map(|h| &h.hook_type)
+        //     .filter_map(|t| {
+        //         if let HookType::Function { inline_hook } = t {
+        //             Some(inline_hook.trampoline_address() as u64)
+        //         } else {
+        //             None
+        //         }
+        //     })
+        //     .map(|addr| PhysicalAddress::from_va(addr))
+        //     .collect::<alloc::vec::Vec<_>>(); // TODO: Can we get rid of the collect?
+        // for trampoline in trampolines {
+        //     let base_page = trampoline.align_down_to_base_page().as_u64();
+        //
+        //     let _ = hooked_npt.npt.split_2mb_to_4kb(base_page);
+        //     hooked_npt
+        //         .npt
+        //         .change_page_permission(base_page, base_page, AccessType::ReadWrite);
+        // }
     } else {
         log::info!("==> Hiding the hooks");
 

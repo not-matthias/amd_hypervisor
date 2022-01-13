@@ -178,7 +178,7 @@ impl NestedPageTable {
     ///
     /// See:
     /// - https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L245
-    pub fn split_2mb_to_4kb(&mut self, guest_pa: u64) -> Option<()> {
+    pub fn split_2mb_to_4kb(&mut self, guest_pa: u64) {
         log::trace!("Splitting 2mb page into 4kb pages: {:x}", guest_pa);
 
         let guest_pa = VAddr::from(guest_pa);
@@ -192,7 +192,7 @@ impl NestedPageTable {
         //
         if !pd_entry.is_page() {
             log::trace!("Page is already split: {:x}.", guest_pa);
-            return Some(());
+            return;
         }
 
         // Unmap the large page
@@ -208,8 +208,6 @@ impl NestedPageTable {
 
             self.map_4kb(address as _, address as _, AccessType::ReadWriteExecute);
         }
-
-        Some(())
     }
 
     pub fn join_4kb_to_2mb(&mut self, guest_pa: u64) -> Option<()> {
