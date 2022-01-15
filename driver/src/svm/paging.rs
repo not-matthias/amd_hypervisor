@@ -1,8 +1,8 @@
 use crate::nt::addresses::PhysicalAddress;
 
-use core::ops::{BitOrAssign};
+use core::ops::BitOrAssign;
 
-use x86::bits64::paging::{PDFlags, PDPTFlags, PML4Entry, PTFlags, MAXPHYADDR};
+use x86::bits64::paging::{PDFlags, PDPTFlags, PML4Entry, PML4Flags, PTFlags, MAXPHYADDR};
 
 pub const _512GB: u64 = 512 * 1024 * 1024 * 1024;
 pub const _1GB: u64 = 1024 * 1024 * 1024;
@@ -28,22 +28,51 @@ const RW: u64 = 0b1;
 const NX: u64 = 0b1 << 63;
 
 impl AccessType {
-    pub fn get_1gb(&self, mut flags: PDPTFlags) -> PDPTFlags {
+    pub fn pml4_flags(self) -> PML4Flags {
         match self {
             AccessType::ReadWrite => {
-                flags.insert(PDPTFlags::RW);
-                flags.insert(PDPTFlags::XD);
+                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US, PML4Flags::XD])
             }
             AccessType::ReadWriteExecute => {
-                flags.insert(PDPTFlags::RW);
-                flags.remove(PDPTFlags::XD);
+                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US])
             }
         }
-
-        flags
     }
 
-    pub fn get_2mb(&self, mut flags: PDFlags) -> PDFlags {
+    pub fn pdpt_flags(self) -> PDPTFlags {
+        match self {
+            AccessType::ReadWrite => {
+                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US, PDPTFlags::XD])
+            }
+            AccessType::ReadWriteExecute => {
+                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US])
+            }
+        }
+    }
+
+    pub fn pd_flags(self) -> PDFlags {
+        match self {
+            AccessType::ReadWrite => {
+                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::XD])
+            }
+            AccessType::ReadWriteExecute => {
+                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US])
+            }
+        }
+    }
+
+    pub fn pt_flags(self) -> PTFlags {
+        match self {
+            AccessType::ReadWrite => {
+                PTFlags::from_iter([PTFlags::P, PTFlags::RW, PTFlags::US, PTFlags::XD])
+            }
+            AccessType::ReadWriteExecute => {
+                PTFlags::from_iter([PTFlags::P, PTFlags::RW, PTFlags::US])
+            }
+        }
+    }
+
+    pub fn modify_2mb(&self, mut flags: PDFlags) -> PDFlags {
         match self {
             AccessType::ReadWrite => {
                 flags.insert(PDFlags::RW);
@@ -58,7 +87,7 @@ impl AccessType {
         flags
     }
 
-    pub fn get_4kb(&self, mut flags: PTFlags) -> PTFlags {
+    pub fn modify_4kb(&self, mut flags: PTFlags) -> PTFlags {
         match self {
             AccessType::ReadWrite => {
                 flags.insert(PTFlags::RW);
