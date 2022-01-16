@@ -43,9 +43,10 @@ impl Processors {
             return None;
         }
 
-        let processors = (0..processor_count())
-            .filter_map(Processor::new)
-            .collect::<Vec<_>>();
+        let mut processors = Vec::new();
+        for i in 0..processor_count() {
+            processors.push(Processor::new(i)?);
+        }
         log::info!("Found {} processors", processors.len());
 
         Some(Self {

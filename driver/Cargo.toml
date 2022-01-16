@@ -36,8 +36,7 @@ winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/
 static_assertions = "1.1.0"
 
 [profile.release]
-lto = "thin"    # IMPORTANT: "fat" doesn't work and will result in an access violation
-#lto = "fat"
+lto = "fat"
 debug = true
 panic = "abort"
 overflow-checks = false

@@ -2,7 +2,6 @@ use crate::{
     nt::include::{ExFreePool, MmGetPhysicalMemoryRanges},
     svm::paging::{bytes_to_pages, _1GB},
 };
-use core::fmt::Debug;
 use tinyvec::ArrayVec;
 use x86::{bits32::paging::BASE_PAGE_SIZE, bits64::paging::BASE_PAGE_SHIFT};
 
@@ -58,8 +57,8 @@ impl PhysicalMemoryDescriptor {
         let mut ranges = ArrayVec::new();
 
         let mut count = 0;
-        loop {
-            let current = unsafe { memory_range.add(count) };
+        for i in 0..MAX_RANGE_COUNT {
+            let current = unsafe { memory_range.add(i) };
             if current.is_null() {
                 break;
             }
