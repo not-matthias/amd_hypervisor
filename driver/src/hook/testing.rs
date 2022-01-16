@@ -2,7 +2,7 @@
 
 use crate::nt::addresses::PhysicalAddress;
 use crate::nt::memory::AllocatedMemory;
-use crate::InlineHook;
+use crate::FunctionHook;
 
 pub static mut ALLOCATED_MEMORY: Option<AllocatedMemory<u8>> = None;
 
@@ -78,7 +78,7 @@ pub fn print_shellcode() {
 
 // ============================================================================
 
-pub static mut HOOK: Option<AllocatedMemory<InlineHook>> = None;
+pub static mut HOOK: Option<AllocatedMemory<FunctionHook>> = None;
 
 // pub fn setup_hook() {
 //     let hook = unsafe {

@@ -1,10 +1,10 @@
-use crate::nt::inline_hook::InlineHook;
+use crate::nt::inline_hook::FunctionHook;
 use crate::nt::ptr::Pointer;
 use nt::include::{PULONG, PVOID, SYSTEM_INFORMATION_CLASS, ULONG};
 
 use winapi::shared::ntdef::NTSTATUS;
 
-pub static mut ZWQSI_ORIGINAL: Option<Pointer<InlineHook>> = None;
+pub static mut ZWQSI_ORIGINAL: Option<Pointer<FunctionHook>> = None;
 pub fn zw_query_system_information(
     system_information_class: u32,
     system_information: PVOID,
@@ -37,7 +37,7 @@ pub fn zw_query_system_information(
     )
 }
 
-pub static mut EAPWT_ORIGINAL: Option<Pointer<InlineHook>> = None;
+pub static mut EAPWT_ORIGINAL: Option<Pointer<FunctionHook>> = None;
 pub fn ex_allocate_pool_with_tag(pool_tag: u32, number_of_bytes: u64, tag: u32) -> *mut u64 {
     log::info!(
         "Called ex_allocate_pool({:x}, {:x}, {:x})",
@@ -57,7 +57,7 @@ pub fn ex_allocate_pool_with_tag(pool_tag: u32, number_of_bytes: u64, tag: u32) 
     fn_ptr(pool_tag, number_of_bytes, tag)
 }
 
-pub static mut MMIAV_ORIGINAL: Option<Pointer<InlineHook>> = None;
+pub static mut MMIAV_ORIGINAL: Option<Pointer<FunctionHook>> = None;
 pub fn mm_is_address_valid(ptr: u64) -> bool {
     log::info!("Called mm_is_address_valid({:x})", ptr);
 

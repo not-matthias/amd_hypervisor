@@ -5,9 +5,6 @@ use tinyvec::ArrayVec;
 use x86::bits32::paging::BASE_PAGE_SIZE;
 use x86::bits64::paging::BASE_PAGE_SHIFT;
 
-/// https://github.com/wbenny/hvpp/blob/84b3f3c241e1eec3ab42f75cad9deef3ad67e6ab/src/hvpp/hvpp/lib/mm/physical_memory_descriptor.h#L22
-///
-/// TODO: Find out why this is the constant we need?
 const MAX_RANGE_COUNT: usize = 32;
 
 #[derive(Debug, Default)]

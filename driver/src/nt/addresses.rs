@@ -1,6 +1,5 @@
 use crate::nt::include::{MmGetPhysicalAddress, MmGetVirtualForPhysical};
 use core::ops::{Deref, DerefMut};
-
 use winapi::shared::ntdef::PHYSICAL_ADDRESS;
 use x86::bits64::paging::{PAddr, BASE_PAGE_SHIFT};
 
@@ -19,7 +18,6 @@ impl PhysicalAddress {
         Self(PAddr::from(Self::pa_from_va(va)))
     }
 
-    /// Returns the virtual address of the current physical address.
     pub fn va(&self) -> *mut u64 {
         Self::va_from_pa(self.0.as_u64()) as *mut u64
     }
@@ -58,16 +56,6 @@ impl const DerefMut for PhysicalAddress {
     }
 }
 
-// TODO: Replace this with `PhysicalAddress`.
-
 pub fn physical_address(ptr: *const u64) -> PAddr {
-    let physical_address = unsafe { *MmGetPhysicalAddress(ptr as _).QuadPart() } as u64;
-
-    log::trace!("physical_address({:p}) = {:x}", ptr, physical_address);
-
-    PAddr::from(physical_address)
-}
-
-pub fn aligned_physical_address(ptr: *mut u64) -> PAddr {
-    physical_address(ptr).align_down_to_base_page()
+    PhysicalAddress::from_va(ptr as u64).0
 }

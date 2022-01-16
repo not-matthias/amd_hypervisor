@@ -2,7 +2,7 @@ extern crate alloc;
 
 use crate::nt::addresses::PhysicalAddress;
 use crate::nt::include::{assert_paged_code, RtlCopyMemory};
-use crate::nt::inline_hook::InlineHook;
+use crate::nt::inline_hook::FunctionHook;
 use crate::nt::memory::AllocatedMemory;
 
 use nt::kernel::get_system_routine_address;
@@ -16,7 +16,7 @@ pub mod testing;
 pub enum HookType {
     /// Creates a shadow page to hook a function.
     Function {
-        inline_hook: AllocatedMemory<InlineHook>,
+        inline_hook: AllocatedMemory<FunctionHook>,
     },
 
     /// Creates a shadow page to hide some data.
@@ -96,8 +96,6 @@ impl Hook {
         let original_pa = PhysicalAddress::from_va(function_ptr);
         log::info!("Physical address: {:#x}", original_pa.as_u64());
 
-        // TODO: Remove some of these useless variables.
-
         let page = Self::copy_page(function_ptr)?;
         let page_va = page.as_ptr() as *mut u64 as u64;
         let page_pa = PhysicalAddress::from_va(page_va);
@@ -107,7 +105,7 @@ impl Hook {
 
         // Install inline hook on the **copied** page (not the original one).
         //
-        let inline_hook = InlineHook::new(function_ptr, hook_va, handler)?;
+        let inline_hook = FunctionHook::new(function_ptr, hook_va, handler)?;
 
         Some(Self {
             original_va: function_ptr,

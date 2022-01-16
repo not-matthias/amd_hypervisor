@@ -178,11 +178,6 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
-    // TODO: Make sure there's no way to scan physical memory to find the hook
-    //     - We have to map hook_pa in the guest to something else -> Use a physical page that is > 512GB maybe.
-    //
-    // TODO: Could we intercept page reads via RW error code?
-
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault Ordering`
     //
     // Nested page faults are entirely a function of the nested page table and VMM processor mode. Nested
@@ -201,7 +196,7 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
 
         hooked_npt
             .rw_npt
-            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute); // TODO: Change this
+            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWrite);
         hooked_npt
             .rwx_npt
             .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);

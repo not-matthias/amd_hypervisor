@@ -35,17 +35,3 @@ pub const POWER_LEVEL: KIRQL = 14;
 pub const PROFILING_LEVEL: KIRQL = 15;
 /// Highest interrupt level
 pub const HIGH_LEVEL: KIRQL = 15;
-
-pub struct IrqlChanger {
-    pub old_irql: u8,
-}
-
-impl IrqlChanger {
-    pub fn lower_irql(_level: u8) -> Self {
-        todo!()
-    }
-
-    pub fn raise_irql() -> Self {
-        todo!()
-    }
-}

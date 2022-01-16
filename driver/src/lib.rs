@@ -21,7 +21,7 @@ extern crate static_assertions;
 use crate::debug::dbg_break;
 use crate::hook::{handlers, testing, Hook, HookType};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
-use crate::nt::inline_hook::InlineHook;
+use crate::nt::inline_hook::FunctionHook;
 use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
 use crate::nt::ptr::Pointer;
 use crate::svm::Processors;
@@ -129,12 +129,6 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
-
-    // TODO: Set this up.
-    // com_logger::builder()
-    //     .base(0x3E8) // Use COM3 port
-    //     .filter(LevelFilter::Trace) // Print debug log
-    //     .setup();
 
     log::info!("Hello from amd_hypervisor!");
 

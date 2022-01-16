@@ -5,7 +5,7 @@ use crate::nt::ptr::Pointer;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
 use crate::svm::data::shared_data::SharedData;
 
-use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2, NpEnable};
+use crate::svm::vmcb::control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
 use core::arch::asm;
 use core::ptr::NonNull;
@@ -88,8 +88,10 @@ impl ProcessorData {
         // we need to redirect the execution to our hook handlers. The breakpoint will be
         // placed on the original instruction.
         //
-        self.guest_vmcb.control_area.intercept_exception |= 1 << 3;
-        // TODO: Create bitflags for this
+        self.guest_vmcb
+            .control_area
+            .intercept_exception
+            .insert(ExceptionVector::BREAKPOINT);
 
         // Configure which instructions to intercept
         //

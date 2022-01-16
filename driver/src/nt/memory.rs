@@ -4,12 +4,12 @@ use crate::nt::include::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
-use crate::svm::paging::{page_align, PAGE_SIZE};
 use core::ops::{Deref, DerefMut};
 use core::ptr::NonNull;
 use nt::include::MmIsAddressValid;
 use winapi::um::winnt::RtlZeroMemory;
 use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
+use x86::bits64::paging::{VAddr, BASE_PAGE_SIZE};
 
 #[derive(Debug)]
 #[repr(C)]
@@ -55,7 +55,7 @@ impl<T> AllocatedMemory<T> {
 
         // The size must equal/greater than a page, to align it to a page
         //
-        if bytes < PAGE_SIZE {
+        if bytes < BASE_PAGE_SIZE {
             log::warn!("Allocating memory failed: size is smaller than a page");
             return None;
         }
@@ -71,7 +71,7 @@ impl<T> AllocatedMemory<T> {
 
         // Make sure it's aligned
         //
-        if page_align!(memory.as_ptr() as usize) != memory.as_ptr() as usize {
+        if VAddr::from_u64(memory.as_ptr() as u64).is_base_page_aligned() {
             log::warn!("Memory is not aligned to a page");
             return None;
         }

@@ -8,14 +8,6 @@ use x86::bits64::paging::{
     PML4Entry, PML4Flags, PTEntry, VAddr, BASE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
 };
 
-// The NX bit can only be set when the no-execute page-protection feature is enabled by setting
-// EFER.NXE to 1 (see “Extended Feature Enable Register (EFER)” on page 56). If EFER.NXE=0, the
-// NX bit is treated as reserved. In this case, a page-fault exception (#PF) occurs if the NX bit is not
-// cleared to 0.
-//
-// TODO: Check for NX bit
-
-/// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
 pub struct NestedPageTable {
     pub pml4: PML4,
@@ -29,7 +21,7 @@ pub struct NestedPageTable {
 
     pub pt_entries: [[PT; 512]; 512],
 }
-const_assert_eq!(core::mem::size_of::<NestedPageTable>(), 0x40202000); // TODO: Reduce this size
+const_assert_eq!(core::mem::size_of::<NestedPageTable>(), 0x40202000);
 const_assert!(core::mem::align_of::<NestedPageTable>() == 4096);
 
 impl NestedPageTable {
@@ -157,17 +149,15 @@ impl NestedPageTable {
         let mut npt =
             AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
 
-        // FIXME: For some reason this still doesn't work.
         for pa in (0..desc.total_size()).step_by(_2MB) {
             npt.map_2mb(pa as u64, pa as u64, access_type);
         }
 
-        // TODO: Do we need APIC base?
         // Map
         //
         // let apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
         // // Bits 12:35
-        // let apic_base = apic_base & 0xFFFFF000; // TODO: Trust copilot or do it myself?
+        // let apic_base = apic_base & 0xFFFFF000;
         // let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
         //
         // npt.map_2mb(apic_base, apic_base, access_type);
@@ -302,7 +292,7 @@ impl NestedPageTable {
             // We already have the page frame number of the physical address, so we don't need
             // to calculate it on our own. Just pass it to the page directory entry.
             //
-            let flags = access_type.pd_flags() | PDFlags::PS; // TODO: Check if this actually works
+            let flags = access_type.pd_flags() | PDFlags::PS;
             *pd_entry = PDEntry::new(PAddr::from(host_pa), flags);
         }
     }
@@ -329,15 +319,12 @@ impl NestedPageTable {
             return;
         }
 
-        // TODO: Do we need to iterate over the subtables?
-
         // Clear the flags
         //
         *entry = PDEntry::new(entry.address(), PDFlags::empty());
     }
 
     fn unmap_4kb(entry: &mut PDEntry) {
-        // TODO: We should probably either make this generic or recode the logic to also clear 4kb entries
         Self::unmap_2mb(entry);
     }
 

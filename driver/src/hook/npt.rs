@@ -107,8 +107,6 @@ impl RetAddrHook {
     }
 
     pub fn enable(&mut self) -> Option<()> {
-        // TODO: Should we update an internal state? Is it a problem if we do it multiple times?
-
         // Split 2mb page into 4kb pages, and set the hooked page to RW
         //
         for hook in self.hooks.iter() {

@@ -15,7 +15,7 @@ pub const JMP_SHELLCODE_LEN: usize = 14;
 pub const BP_SHELLCODE_LEN: usize = 1;
 
 #[derive(Debug, Snafu)]
-pub enum InlineHookError {
+pub enum FunctionHookError {
     #[snafu(display("Failed to parse bytes of original function"))]
     InvalidBytes,
 
@@ -43,11 +43,7 @@ pub enum HookType {
     Breakpoint,
 }
 
-// TODO: Could we detect when the hook calls the trampoline? Because then we know that the hook is finished and we can hide it again.
-// TODO: Rename this to ShadowHook or ShadowInlineHook, because it's not entirely an inline hook.
-//      Or maybe restructure it so that don't have to pass two addresses (real page, shadow page).
-//      Or maybe switch it in advance and then unswitch it again. So then we could apply it directly to the shadow page.
-pub struct InlineHook {
+pub struct FunctionHook {
     trampoline: AllocatedMemory<u8>,
 
     /// Original address of the function (real page)
@@ -62,7 +58,7 @@ pub struct InlineHook {
     enabled: bool,
 }
 
-impl InlineHook {
+impl FunctionHook {
     /// Creates a new inline hook (not yet enabled) for the specified function.
     ///
     /// ## Parameters
@@ -114,7 +110,9 @@ impl InlineHook {
             }
         };
 
-        // Lock virtual address. See: TODO
+        // Lock the virtual address. The specified hook address can/will be tradable pagable memory
+        // or where its physical address can be changed by the Memory Manager at any time. We need to
+        // prevent that because we assume permanent 1:1 mapping of the hook virtual and physical addresses.
         //
         let mdl = unsafe {
             IoAllocateMdl(
@@ -130,7 +128,6 @@ impl InlineHook {
             return None;
         }
         unsafe { MmProbeAndLockPages(mdl, KernelMode, IoReadAccess) };
-        // TODO: Try catch in rust?
 
         //
         //
@@ -236,7 +233,7 @@ impl InlineHook {
         original_address: u64,
         address: u64,
         required_size: usize,
-    ) -> Result<AllocatedMemory<u8>, InlineHookError> {
+    ) -> Result<AllocatedMemory<u8>, FunctionHookError> {
         log::info!("Creating the trampoline for function: {:#x}", address);
 
         // Read bytes from function and decode them. Read 2 times the amount needed, in case there are
@@ -252,7 +249,7 @@ impl InlineHook {
         let mut trampoline = Vec::new();
         for instr in &mut decoder {
             if instr.is_invalid() {
-                return Err(InlineHookError::InvalidBytes);
+                return Err(FunctionHookError::InvalidBytes);
             }
 
             if total_bytes >= required_size {
@@ -260,7 +257,7 @@ impl InlineHook {
             }
 
             if instr.is_ip_rel_memory_operand() {
-                return Err(InlineHookError::RelativeInstruction);
+                return Err(FunctionHookError::RelativeInstruction);
             }
 
             // Create the new trampoline instruction
@@ -274,33 +271,33 @@ impl InlineHook {
                 | FlowControl::ConditionalBranch
                 | FlowControl::UnconditionalBranch
                 | FlowControl::IndirectCall => {
-                    return Err(InlineHookError::RelativeInstruction);
+                    return Err(FunctionHookError::RelativeInstruction);
                 }
                 FlowControl::IndirectBranch
                 | FlowControl::Interrupt
                 | FlowControl::XbeginXabortXend
-                | FlowControl::Exception => return Err(InlineHookError::UnsupportedInstruction),
+                | FlowControl::Exception => return Err(FunctionHookError::UnsupportedInstruction),
             };
         }
 
         if total_bytes < required_size {
-            return Err(InlineHookError::NotEnoughBytes);
+            return Err(FunctionHookError::NotEnoughBytes);
         }
 
         if trampoline.is_empty() {
-            return Err(InlineHookError::NoInstructions);
+            return Err(FunctionHookError::NoInstructions);
         }
 
         // Allocate new memory for the trampoline and encode the instructions.
         //
         let memory = AllocatedMemory::<u8>::alloc_executable(total_bytes + JMP_SHELLCODE_LEN)
-            .ok_or(InlineHookError::AllocationFailed)?;
+            .ok_or(FunctionHookError::AllocationFailed)?;
         log::info!("Allocated trampoline memory at {:p}", memory.as_ptr());
 
         let block = InstructionBlock::new(&trampoline, memory.as_ptr() as _);
         let mut encoded = BlockEncoder::encode(decoder.bitness(), block, BlockEncoderOptions::NONE)
             .map(|b| b.code_buffer)
-            .map_err(|_| InlineHookError::EncodingFailed)?;
+            .map_err(|_| FunctionHookError::EncodingFailed)?;
         log::info!("Encoded trampoline: {:x?}", encoded);
 
         // Add jmp to the original function at the end. We can't use `address` for this, because
@@ -327,7 +324,7 @@ impl InlineHook {
     }
 }
 
-impl Drop for InlineHook {
+impl Drop for FunctionHook {
     fn drop(&mut self) {
         if !self.mdl.is_null() {
             unsafe {

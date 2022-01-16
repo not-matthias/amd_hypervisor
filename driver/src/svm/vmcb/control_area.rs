@@ -2,11 +2,11 @@ use bitflags::bitflags;
 
 #[repr(C)]
 pub struct ControlArea {
-    pub intercept_cr_read: u16,   // +0x000
-    pub intercept_cr_write: u16,  // +0x002
-    pub intercept_dr_read: u16,   // +0x004
-    pub intercept_dr_write: u16,  // +0x006
-    pub intercept_exception: u32, // +0x008
+    pub intercept_cr_read: u16,               // +0x000
+    pub intercept_cr_write: u16,              // +0x002
+    pub intercept_dr_read: u16,               // +0x004
+    pub intercept_dr_write: u16,              // +0x006
+    pub intercept_exception: ExceptionVector, // +0x008
 
     pub intercept_misc1: InterceptMisc1,     // +0x00c
     pub intercept_misc2: InterceptMisc2,     // +0x010
@@ -45,6 +45,79 @@ pub struct ControlArea {
 const_assert_eq!(core::mem::size_of::<ControlArea>(), 0x400);
 
 bitflags! {
+
+    /// Copied from `x86_64/structures/idt.rs`
+    pub struct ExceptionVector: u32 {
+        /// Error during Division
+        const DIVISION = 0x00;
+
+        /// Debug
+        const DEBUG = 0x01;
+
+        /// Non-Maskable Interrupt
+        const NON_MASKABLE_INTERRUPT = 0x02;
+
+        /// Breakpoint
+        const BREAKPOINT = 0x03;
+
+        /// Overflow
+        const OVERFLOW = 0x04;
+
+        /// Bound Range Exceeded
+        const BOUND_RANGE = 0x05;
+
+        /// Invalid Opcode
+        const INVALID_OPCODE = 0x06;
+
+        /// Device Not Available
+        const DEVICE_NOT_AVAILABLE = 0x07;
+
+        /// Double Fault
+        const DOUBLE = 0x08;
+
+        /// Invalid TSS
+        const INVALID_TSS = 0x0A;
+
+        /// Segment Not Present
+        const SEGMENT_NOT_PRESENT = 0x0B;
+
+        /// Stack Fault
+        const STACK = 0x0C;
+
+        /// General Protection Fault
+        const GENERAL_PROTECTION = 0x0D;
+
+        /// Page Fault
+        const PAGE = 0x0E;
+
+        /// x87 Floating-Point Exception
+        const X87_FLOATING_POINT = 0x10;
+
+        /// Alignment Check
+        const ALIGNMENT_CHECK = 0x11;
+
+        /// Machine Check
+        const MACHINE_CHECK = 0x12;
+
+        /// SIMD Floating-Point Exception
+        const SIMD_FLOATING_POINT = 0x13;
+
+        /// Virtualization Exception (Intel-only)
+        const VIRTUALIZATION = 0x14;
+
+        /// Control Protection Exception
+        const CONTROL_PROTECTION = 0x15;
+
+        /// Hypervisor Injection (AMD-only)
+        const HYPERVISOR_INJECTION = 0x1C;
+
+        /// VMM Communication (AMD-only)
+        const VMM_COMMUNICATION = 0x1D;
+
+        /// Security Exception
+        const SECURITY = 0x1E;
+    }
+
     /// See `15.15.3 VMCB Clean Field`
     ///
     /// Bits 31:12 are reserved for future implementations. For forward compatibility, if the hypervisor has
