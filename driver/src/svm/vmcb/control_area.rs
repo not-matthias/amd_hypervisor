@@ -18,7 +18,7 @@ pub struct ControlArea {
     pub msrpm_base_pa: u64,                  // +0x048
     pub tsc_offset: u64,                     // +0x050
     pub guest_asid: u32,                     // +0x058
-    pub tlb_control: u32,                    // +0x05c
+    pub tlb_control: TlbControl,             // +0x05c
     pub vintr: u64,                          // +0x060
     pub interrupt_shadow: u64,               // +0x068
     pub exit_code: VmExitCode,               // +0x070
@@ -31,7 +31,7 @@ pub struct ControlArea {
     pub event_inj: u64,                      // +0x0a8
     pub ncr3: u64,                           // +0x0b0
     pub lbr_virtualization_enable: u64,      // +0x0b8
-    pub vmcb_clean: u64,                     // +0x0c0
+    pub vmcb_clean: VmcbClean,               // +0x0c0
     pub nrip: u64,                           // +0x0c8
     pub num_of_bytes_fetched: u8,            // +0x0d0
     pub guest_instruction_bytes: [u8; 15],   // +0x0d1
@@ -45,6 +45,73 @@ pub struct ControlArea {
 }
 
 bitflags! {
+    /// See `15.15.3 VMCB Clean Field`
+    ///
+    /// Bits 31:12 are reserved for future implementations. For forward compatibility, if the hypervisor has
+    /// not modified the VMCB, the hypervisor may write FFFF_FFFFh to the VMCB Clean Field to indicate
+    /// that it has not changed any VMCB contents other than the fields described below as explicitly
+    /// uncached. **The hypervisor should write 0h to indicate that the VMCB is new or potentially inconsistent
+    /// with the CPU's cached copy**, as occurs when the hypervisor has allocated a new location for an existing
+    /// VMCB from a list of free pages and does not track whether that page had recently been used as a
+    /// VMCB for another guest. If any VMCB fields (excluding explicitly uncached fields) have been
+    /// modified, all clean bits that are undefined (within the scope of the hypervisor) must be cleared to zero.
+    pub struct VmcbClean: u64 {
+        /// Intercepts: all the intercept vectors, TSC offset, Pause Filter Count
+        const I = 1 << 0;
+
+        /// IOMSRPM: IOPM_BASE, MSRPM_BASE
+        const IOPM = 1 << 1;
+
+        /// ASID
+        const ASID = 1 << 2;
+
+        /// V_TPR, V_IRQ, V_INTR_PRIO, V_IGN_TPR, V_INTR_MASKING, V_INTR_VECTOR (Offset 60h–67h)
+        const TPR = 1 << 3;
+
+        /// Nested Paging: NCR3, G_PAT
+        const NP = 1 << 4;
+
+        /// CR0, CR3, CR4, EFER
+        const CR_X = 1 << 5;
+
+        /// DR6, DR7
+        const DR_X = 1 << 6;
+
+        /// GDT/IDT Limit and Base
+        const DT = 1 << 7;
+
+        /// CS/DS/SS/ES Sel/Base/Limit/Attr, CPL
+        const SEG = 1 << 8;
+
+        /// CR2
+        const CR2 = 1 << 9;
+
+        /// DbgCtlMsr, br_from/to, lastint_from/to
+        const LBR = 1 << 10;
+
+        /// AVIC APIC_BAR; AVIC APIC_BACKING_PAGE, AVIC PHYSICAL_TABLE and AVIC LOGICAL_
+        /// TABLE Pointers
+        const AVIC = 1 << 11;
+
+        /// S_CET, SSP, ISST_ADDR
+        const CET = 1 << 12;
+    }
+
+    pub struct TlbControl: u32 {
+        /// 00h—Do nothing.
+        const DO_NOTHING                        = 0;
+
+        /// 01h—Flush entire TLB (all entries, all ASIDs) on VMRUN.
+        /// Should only be used by legacy hypervisors.
+        const FLUSH_ENTIRE_TLB                  = 1;
+
+        /// 03h—Flush this guest’s TLB entries.
+        const FLUSH_GUEST_TLB                   = 3;
+
+        /// 07h—Flush this guest’s non-global TLB entries.
+        const FLUSH_GUEST_NON_GLOBAL_TLB        = 4;
+    }
+
     pub struct NpEnable: u64 {
         const NESTED_PAGING                     = 1 << 0;
         const SECURE_ENCRYPTED_VIRTUALIZATION   = 1 << 1;
