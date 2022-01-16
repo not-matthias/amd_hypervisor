@@ -1,7 +1,6 @@
 use crate::{
     svm::{
         data::{msr_bitmap::SVM_MSR_VM_HSAVE_PA, shared_data::SharedData},
-        msr,
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
             Vmcb,
@@ -109,6 +108,11 @@ impl ProcessorData {
             .control_area
             .intercept_misc2
             .insert(InterceptMisc2::INTERCEPT_VMRUN);
+
+        self.guest_vmcb
+            .control_area
+            .intercept_misc1
+            .insert(InterceptMisc1::INTERCEPT_RDTSC);
 
         // Trigger #VMEXIT on MSR exit as defined in msr permission map.
         //
