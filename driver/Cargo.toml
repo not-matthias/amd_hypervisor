@@ -10,7 +10,6 @@ crate-type = ["cdylib"]
 default = []
 no-assertions = []
 mmap = ["log/release_max_level_off", "no-assertions"]
-stub = []
 
 [dependencies]
 pe = { git = "https://github.com/rust-game-hacks/driver" }

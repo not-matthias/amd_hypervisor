@@ -204,7 +204,3 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
         }
     }
 }
-
-#[cfg(feature = "stub")]
-#[no_mangle]
-pub extern "system" fn _DllMainCRTStartup() {}
