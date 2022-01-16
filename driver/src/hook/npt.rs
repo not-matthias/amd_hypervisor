@@ -27,7 +27,7 @@ impl DuplicateNptHook {
             }
 
             let page = hook.original_pa.align_down_to_base_page().as_u64();
-            let hook_page = hook.hook_pa.as_u64();
+            let hook_page = hook.hook_pa.align_down_to_base_page().as_u64();
 
             self.rwx_npt
                 .change_page_permission(page, page, AccessType::ReadWrite);
