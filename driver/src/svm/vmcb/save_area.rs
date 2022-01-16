@@ -96,6 +96,7 @@ pub struct SaveArea {
     pub last_excep_from: u64,
     pub last_excep_to: u64,
 }
+const_assert_eq!(core::mem::size_of::<SaveArea>(), 0x298);
 
 impl SaveArea {
     // See: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L893

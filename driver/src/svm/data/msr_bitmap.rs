@@ -1,7 +1,8 @@
 use crate::nt::include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP};
 use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::PAGE_SIZE;
+
 use core::mem::MaybeUninit;
+use x86::bits64::paging::BASE_PAGE_SIZE;
 use x86::msr::IA32_EFER;
 
 pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc0010117;
@@ -11,9 +12,8 @@ pub const BITS_PER_MSR: u32 = 2;
 pub const SECOND_MSR_RANGE_BASE: u32 = 0xc0000000;
 pub const SECOND_MSRPM_OFFSET: u32 = 0x800 * CHAR_BIT;
 
-pub const SVM_MSR_PERMISSIONS_MAP_SIZE: u32 = (PAGE_SIZE * 2) as u32;
+pub const SVM_MSR_PERMISSIONS_MAP_SIZE: u32 = (BASE_PAGE_SIZE * 2) as u32;
 
-// Size: `PAGE_SIZE * 2`
 #[repr(C)]
 pub struct Bitmap {
     /// 0000_0000 to 0000_1FFF
@@ -25,13 +25,14 @@ pub struct Bitmap {
     /// Reserved
     pub msr_bitmap_3: [u8; 2048],
 }
+const_assert_eq!(core::mem::size_of::<Bitmap>(), 2 * BASE_PAGE_SIZE);
 // TODO: Figure out how to use this instead.
 
 pub struct MsrBitmap;
 
 impl MsrBitmap {
     pub fn new() -> Option<AllocatedMemory<u32>> {
-        let memory = AllocatedMemory::<u32>::alloc_contiguous(PAGE_SIZE * 2)?;
+        let memory = AllocatedMemory::<u32>::alloc_contiguous(BASE_PAGE_SIZE * 2)?;
 
         // Setup the msr bitmap
         //

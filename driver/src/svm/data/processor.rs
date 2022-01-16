@@ -4,12 +4,13 @@ use crate::nt::memory::AllocatedMemory;
 use crate::nt::ptr::Pointer;
 use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
 use crate::svm::data::shared_data::SharedData;
-use crate::svm::paging::PAGE_SIZE;
+
 use crate::svm::vmcb::control_area::{InterceptMisc1, InterceptMisc2, NpEnable};
 use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
 use core::arch::asm;
 use core::ptr::NonNull;
 use nt::include::PVOID;
+use x86::bits64::paging::BASE_PAGE_SIZE;
 use x86::msr::wrmsr;
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
@@ -32,6 +33,7 @@ pub struct HostStackLayout {
     pub padding_1: u64,
     pub reserved_1: u64,
 }
+const_assert_eq!(core::mem::size_of::<HostStackLayout>(), KERNEL_STACK_SIZE);
 
 /// The data for a single **virtual** processor.
 #[repr(C, align(4096))]
@@ -48,8 +50,12 @@ pub struct ProcessorData {
     pub host_stack_layout: HostStackLayout,
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
-    pub host_state_area: [u8; PAGE_SIZE],
+    pub host_state_area: [u8; BASE_PAGE_SIZE],
 }
+const_assert_eq!(
+    core::mem::size_of::<ProcessorData>(),
+    KERNEL_STACK_SIZE + 3 * BASE_PAGE_SIZE
+);
 
 impl ProcessorData {
     pub fn new() -> Option<AllocatedMemory<Self>> {

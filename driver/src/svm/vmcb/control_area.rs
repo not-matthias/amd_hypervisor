@@ -1,6 +1,5 @@
 use bitflags::bitflags;
 
-// Size: 0x400
 #[repr(C)]
 pub struct ControlArea {
     pub intercept_cr_read: u16,   // +0x000
@@ -43,6 +42,7 @@ pub struct ControlArea {
     pub vmcb_save_state_pointer: u64,        // +0x108
     pub reserved4: [u8; 0x400 - 0x110],      // +0x110
 }
+const_assert_eq!(core::mem::size_of::<ControlArea>(), 0x400);
 
 bitflags! {
     /// See `15.15.3 VMCB Clean Field`

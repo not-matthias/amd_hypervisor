@@ -1,5 +1,3 @@
-extern crate alloc;
-
 use crate::nt::addresses::physical_address;
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::paging::{AccessType, PFN_MASK, _2MB, _512GB};
@@ -31,6 +29,8 @@ pub struct NestedPageTable {
 
     pub pt_entries: [[PT; 512]; 512],
 }
+const_assert_eq!(core::mem::size_of::<NestedPageTable>(), 0x40202000); // TODO: Reduce this size
+const_assert!(core::mem::align_of::<NestedPageTable>() == 4096);
 
 impl NestedPageTable {
     /// Creates the 2MB identity page table. Maps every guest physical address to the same host

@@ -17,3 +17,7 @@ pub struct GuestRegisters {
     pub rcx: u64,
     pub rax: u64,
 }
+const_assert_eq!(
+    core::mem::size_of::<GuestRegisters>(),
+    0x80 /* 16 * 0x8 */
+);
