@@ -5,7 +5,7 @@ use crate::utils::{
 use core::mem::MaybeUninit;
 use x86::{bits64::paging::BASE_PAGE_SIZE, msr::IA32_EFER};
 
-pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc0010117;
+pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc001_0117;
 pub const EFER_SVME: u64 = 1 << 12;
 pub const CHAR_BIT: u32 = 8;
 pub const BITS_PER_MSR: u32 = 2;

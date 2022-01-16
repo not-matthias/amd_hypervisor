@@ -33,6 +33,24 @@ pub fn is_svm_supported() -> bool {
         return false;
     }
 
+    // Check features that are used by this hypervisor
+    //
+    if !CpuId::new()
+        .get_svm_info()
+        .map(|svm_info| {
+            let tsc_rate_msr = svm_info.has_tsc_rate_msr();
+            let nested_paging = svm_info.has_nested_paging();
+
+            log::info!("TSC rate MSR: {}", tsc_rate_msr);
+            log::info!("Nested paging: {}", nested_paging);
+
+            tsc_rate_msr && nested_paging
+        })
+        .unwrap_or_default()
+    {
+        log::warn!("Some features needed for this hypervisor are not available.");
+    }
+
     // Check `VM_CR.SVMDIS == 0`
     //
     // See in the AMD Manual '15.30.1  VM_CR MSR (C001_0114h)'

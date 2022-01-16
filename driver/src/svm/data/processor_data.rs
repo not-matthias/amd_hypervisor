@@ -1,6 +1,7 @@
 use crate::{
     svm::{
         data::{msr_bitmap::SVM_MSR_VM_HSAVE_PA, shared_data::SharedData},
+        msr,
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
             Vmcb,
@@ -139,10 +140,6 @@ impl ProcessorData {
 
         self.guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
         log::info!("Pml4 pa: {:x}", pml4_pa.as_u64());
-
-        // If we don't want to use NPT:
-        //
-        // self.guest_vmcb.control_area.ncr3 = cr3();
 
         // Setup guest state based on current system state.
         //

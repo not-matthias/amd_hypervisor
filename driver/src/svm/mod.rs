@@ -25,6 +25,7 @@ use x86::{
 
 pub mod data;
 pub mod events;
+pub mod msr;
 pub mod paging;
 pub mod vmcb;
 pub mod vmexit;
