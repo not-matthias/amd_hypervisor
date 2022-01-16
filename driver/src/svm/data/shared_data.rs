@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::{
-    hook::npt::DuplicateNptHook, nt::memory::AllocatedMemory, svm::data::msr_bitmap::MsrBitmap,
+    hook::npt::DuplicateNptHook, svm::data::msr_bitmap::MsrBitmap, utils::memory::AllocatedMemory,
     Hook,
 };
 use alloc::vec::Vec;

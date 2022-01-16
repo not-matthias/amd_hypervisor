@@ -1,6 +1,6 @@
 use crate::{
-    nt::{addresses::physical_address, memory::AllocatedMemory},
     svm::paging::{AccessType, PFN_MASK, _2MB, _512GB},
+    utils::{addresses::physical_address, memory::AllocatedMemory},
     PhysicalMemoryDescriptor,
 };
 use elain::Align;

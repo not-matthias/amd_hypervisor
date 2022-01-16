@@ -1,10 +1,10 @@
 extern crate alloc;
 
-use crate::nt::{
+use crate::utils::{
     addresses::PhysicalAddress,
-    include::{assert_paged_code, RtlCopyMemory},
     inline_hook::FunctionHook,
     memory::AllocatedMemory,
+    nt::{irql::assert_paged_code, RtlCopyMemory},
 };
 use nt::kernel::get_system_routine_address;
 use x86::bits64::paging::{PAddr, VAddr, BASE_PAGE_SIZE};

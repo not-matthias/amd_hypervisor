@@ -1,8 +1,8 @@
 pub mod addresses;
-pub mod include;
+pub mod context;
 pub mod inline_hook;
-pub mod irql;
 pub mod memory;
+pub mod nt;
 pub mod physmem_descriptor;
 pub mod processor;
 pub mod ptr;

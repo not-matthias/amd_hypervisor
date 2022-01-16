@@ -1,6 +1,6 @@
 use crate::{
-    nt::{addresses::PhysicalAddress, memory::AllocatedMemory},
     svm::{data::nested_page_table::NestedPageTable, paging::AccessType},
+    utils::{addresses::PhysicalAddress, memory::AllocatedMemory},
     Hook, HookType,
 };
 use alloc::vec::Vec;

@@ -1,6 +1,6 @@
 //! Everything related to memory.
 
-use crate::nt::include::{
+use crate::utils::nt::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };

@@ -1,6 +1,6 @@
 use crate::{
-    nt::include::Context,
     svm::data::segmentation::{SegmentAttribute, SegmentDescriptor},
+    utils::nt::Context,
 };
 use core::arch::asm;
 use x86::{

@@ -1,6 +1,6 @@
-use crate::nt::{
-    include::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP},
+use crate::utils::{
     memory::AllocatedMemory,
+    nt::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP},
 };
 use core::mem::MaybeUninit;
 use x86::{bits64::paging::BASE_PAGE_SIZE, msr::IA32_EFER};

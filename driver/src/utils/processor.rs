@@ -1,6 +1,6 @@
 //! Handles everything related to the physical processors.
 
-use crate::nt::include::{
+use crate::utils::nt::{
     KeGetProcessorNumberFromIndex, KeQueryActiveProcessorCountEx,
     KeRevertToUserGroupAffinityThread, KeSetSystemGroupAffinityThread, ZwYieldExecution,
 };

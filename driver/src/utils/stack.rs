@@ -1,4 +1,4 @@
-use crate::nt::include::RtlCaptureContext;
+use crate::utils::nt::RtlCaptureContext;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use nt::include::MmIsAddressValid;

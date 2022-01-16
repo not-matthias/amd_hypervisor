@@ -10,8 +10,9 @@
 #![feature(const_mut_refs)]
 #![feature(const_ptr_as_ref)]
 #![feature(const_trait_impl)]
-#![allow(clippy::new_ret_no_self)]
 #![feature(int_abs_diff)]
+#![allow(clippy::new_ret_no_self)]
+#![allow(clippy::not_unsafe_ptr_arg_deref)]
 
 extern crate alloc;
 
@@ -20,16 +21,16 @@ extern crate alloc;
 use crate::{
     debug::dbg_break,
     hook::{handlers, testing, Hook, HookType},
-    nt::{
-        include::{KeBugCheck, MANUALLY_INITIATED_CRASH},
-        inline_hook::FunctionHook,
+    svm::Processors,
+    utils::{
+        nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
         physmem_descriptor::PhysicalMemoryDescriptor,
         ptr::Pointer,
     },
-    svm::Processors,
 };
 use alloc::{vec, vec::Vec};
 use log::{KernelLogger, LevelFilter};
+use utils::inline_hook::FunctionHook;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
@@ -41,9 +42,9 @@ use winapi::{
 pub mod debug;
 pub mod hook;
 pub mod lang;
-pub mod nt;
 pub mod support;
 pub mod svm;
+pub mod utils;
 
 #[global_allocator]
 static GLOBAL: km_alloc::KernelAlloc = km_alloc::KernelAlloc;
@@ -169,7 +170,7 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
             let mut handle = core::mem::MaybeUninit::uninit();
             unsafe {
-                crate::nt::include::PsCreateSystemThread(
+                crate::utils::nt::PsCreateSystemThread(
                     handle.as_mut_ptr() as _,
                     winapi::km::wdm::GENERIC_ALL,
                     0 as _,

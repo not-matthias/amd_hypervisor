@@ -3,17 +3,17 @@ extern crate alloc;
 use crate::{
     dbg_break,
     hook::Hook,
-    nt::{
-        include::Context,
-        memory::AllocatedMemory,
-        processor::{processor_count, ProcessorExecutor},
-    },
     support,
     support::is_virtualized,
     svm::{
         data::{msr_bitmap::EFER_SVME, processor_data::ProcessorData, shared_data::SharedData},
         vmexit::CPUID_DEVIRTUALIZE,
         vmlaunch::launch_vm,
+    },
+    utils::{
+        memory::AllocatedMemory,
+        nt::Context,
+        processor::{processor_count, ProcessorExecutor},
     },
     KeBugCheck, MANUALLY_INITIATED_CRASH,
 };

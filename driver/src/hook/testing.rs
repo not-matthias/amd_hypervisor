@@ -2,7 +2,7 @@
 //! easier.
 
 use crate::{
-    nt::{addresses::PhysicalAddress, memory::AllocatedMemory},
+    utils::{addresses::PhysicalAddress, memory::AllocatedMemory},
     FunctionHook,
 };
 

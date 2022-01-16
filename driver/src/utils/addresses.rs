@@ -1,4 +1,4 @@
-use crate::nt::include::{MmGetPhysicalAddress, MmGetVirtualForPhysical};
+use crate::utils::nt::{MmGetPhysicalAddress, MmGetVirtualForPhysical};
 use core::ops::{Deref, DerefMut};
 use winapi::shared::ntdef::PHYSICAL_ADDRESS;
 use x86::bits64::paging::{PAddr, BASE_PAGE_SHIFT};

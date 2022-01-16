@@ -35,3 +35,12 @@ pub const POWER_LEVEL: KIRQL = 14;
 pub const PROFILING_LEVEL: KIRQL = 15;
 /// Highest interrupt level
 pub const HIGH_LEVEL: KIRQL = 15;
+
+pub macro assert_paged_code() {
+    #[cfg(not(feature = "no-assertions"))]
+    assert!(
+        unsafe { $crate::utils::nt::irql::KeGetCurrentIrql() }
+            <= $crate::utils::nt::irql::APC_LEVEL,
+        "Called at IRQL > APC_LEVEL",
+    );
+}

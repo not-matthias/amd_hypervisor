@@ -1,6 +1,6 @@
-use crate::nt::{
-    include::{KeInvalidateAllCaches, RtlCopyMemory},
+use crate::utils::{
     memory::AllocatedMemory,
+    nt::{KeInvalidateAllCaches, RtlCopyMemory},
 };
 use alloc::{vec, vec::Vec};
 use iced_x86::{

@@ -1,4 +1,4 @@
-use crate::nt::{inline_hook::FunctionHook, ptr::Pointer};
+use crate::utils::{inline_hook::FunctionHook, ptr::Pointer};
 use nt::include::{PULONG, PVOID, SYSTEM_INFORMATION_CLASS, ULONG};
 use winapi::shared::ntdef::NTSTATUS;
 

@@ -1,6 +1,6 @@
 use crate::{
-    nt::include::{ExFreePool, MmGetPhysicalMemoryRanges},
     svm::paging::{bytes_to_pages, _1GB},
+    utils::nt::{ExFreePool, MmGetPhysicalMemoryRanges},
 };
 use tinyvec::ArrayVec;
 use x86::{bits32::paging::BASE_PAGE_SIZE, bits64::paging::BASE_PAGE_SHIFT};
@@ -43,6 +43,7 @@ pub struct PhysicalMemoryDescriptor {
 }
 
 impl PhysicalMemoryDescriptor {
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // See: https://doxygen.reactos.org/d1/d6d/dynamic_8c_source.html#l00073
         //

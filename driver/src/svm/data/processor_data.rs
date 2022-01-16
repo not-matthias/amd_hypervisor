@@ -1,16 +1,16 @@
 use crate::{
-    nt::{
-        addresses::physical_address,
-        include::{Context, KTRAP_FRAME},
-        memory::AllocatedMemory,
-        ptr::Pointer,
-    },
     svm::{
         data::{msr_bitmap::SVM_MSR_VM_HSAVE_PA, shared_data::SharedData},
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
             Vmcb,
         },
+    },
+    utils::{
+        addresses::physical_address,
+        memory::AllocatedMemory,
+        nt::{Context, KTRAP_FRAME},
+        ptr::Pointer,
     },
 };
 use core::{arch::asm, ptr::NonNull};

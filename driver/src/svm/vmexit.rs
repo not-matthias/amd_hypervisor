@@ -1,15 +1,15 @@
 use crate::{
     debug::dbg_break,
-    nt::{
-        addresses::{physical_address, PhysicalAddress},
-        include::{KeBugCheck, MANUALLY_INITIATED_CRASH},
-        ptr::Pointer,
-    },
     svm::{
         data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor_data::ProcessorData},
         events::EventInjection,
         paging::AccessType,
         vmcb::control_area::{NptExitInfo, TlbControl, VmExitCode, VmcbClean},
+    },
+    utils::{
+        addresses::{physical_address, PhysicalAddress},
+        nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
+        ptr::Pointer,
     },
     HookType,
 };
