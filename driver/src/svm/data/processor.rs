@@ -1,17 +1,21 @@
-use crate::nt::addresses::physical_address;
-use crate::nt::include::Context;
-use crate::nt::memory::AllocatedMemory;
-use crate::nt::ptr::Pointer;
-use crate::svm::data::msr_bitmap::SVM_MSR_VM_HSAVE_PA;
-use crate::svm::data::shared_data::SharedData;
-
-use crate::svm::vmcb::control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable};
-use crate::{nt::include::KTRAP_FRAME, svm::vmcb::Vmcb};
-use core::arch::asm;
-use core::ptr::NonNull;
+use crate::{
+    nt::{
+        addresses::physical_address,
+        include::{Context, KTRAP_FRAME},
+        memory::AllocatedMemory,
+        ptr::Pointer,
+    },
+    svm::{
+        data::{msr_bitmap::SVM_MSR_VM_HSAVE_PA, shared_data::SharedData},
+        vmcb::{
+            control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
+            Vmcb,
+        },
+    },
+};
+use core::{arch::asm, ptr::NonNull};
 use nt::include::PVOID;
-use x86::bits64::paging::BASE_PAGE_SIZE;
-use x86::msr::wrmsr;
+use x86::{bits64::paging::BASE_PAGE_SIZE, msr::wrmsr};
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
 pub const STACK_CONTENTS_SIZE: usize =
@@ -46,7 +50,6 @@ pub struct ProcessorData {
     ///  ^       HostStackLimit[KERNEL_STACK_SIZE - 2]    StackBase
     ///  High    HostStackLimit[KERNEL_STACK_SIZE - 1]    StackBase
     /// ```
-    ///
     pub host_stack_layout: HostStackLayout,
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
@@ -85,8 +88,8 @@ impl ProcessorData {
         log::trace!("msr_pm_pa: {:x}", msr_pm_pa);
 
         // Intercept breakpoint exceptions. This is required for the npt hooks because
-        // we need to redirect the execution to our hook handlers. The breakpoint will be
-        // placed on the original instruction.
+        // we need to redirect the execution to our hook handlers. The breakpoint will
+        // be placed on the original instruction.
         //
         self.guest_vmcb
             .control_area

@@ -1,9 +1,10 @@
-use crate::nt::include::{ExFreePool, MmGetPhysicalMemoryRanges};
-use crate::svm::paging::{bytes_to_pages, _1GB};
+use crate::{
+    nt::include::{ExFreePool, MmGetPhysicalMemoryRanges},
+    svm::paging::{bytes_to_pages, _1GB},
+};
 use core::fmt::Debug;
 use tinyvec::ArrayVec;
-use x86::bits32::paging::BASE_PAGE_SIZE;
-use x86::bits64::paging::BASE_PAGE_SHIFT;
+use x86::{bits32::paging::BASE_PAGE_SIZE, bits64::paging::BASE_PAGE_SHIFT};
 
 const MAX_RANGE_COUNT: usize = 32;
 
@@ -29,13 +30,13 @@ impl PhysicalMemoryRange {
 ///
 /// ## What is this and why are there multiple physical memory ranges?
 ///
-/// This is due to different memory mappings. You can't change them because they are hardware mappings,
-/// which leaves holes in the physical memory address space.
+/// This is due to different memory mappings. You can't change them because they
+/// are hardware mappings, which leaves holes in the physical memory address
+/// space.
 ///
 /// For more information, see the OSDev wiki: https://wiki.osdev.org/Memory_Map_(x86)
 ///
 /// Thanks for @PDBDream
-///
 #[derive(Debug)]
 pub struct PhysicalMemoryDescriptor {
     ranges: ArrayVec<[PhysicalMemoryRange; MAX_RANGE_COUNT]>,

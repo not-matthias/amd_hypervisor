@@ -34,7 +34,6 @@ bitfield! {
 
 impl EventInjection {
     /// See `8 Exceptions and Interrupts > 8.2 Vectors > 8.2.14 #GP`.
-    ///
     pub fn gp() -> Self {
         let mut event = EventInjection(0);
         event.set_vector(13); // #GP

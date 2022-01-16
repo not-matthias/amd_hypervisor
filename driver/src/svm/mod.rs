@@ -1,19 +1,27 @@
 extern crate alloc;
 
-use crate::hook::Hook;
-use crate::nt::include::Context;
-use crate::nt::memory::AllocatedMemory;
-use crate::nt::processor::{processor_count, ProcessorExecutor};
-use crate::support::is_virtualized;
-use crate::svm::data::msr_bitmap::EFER_SVME;
-use crate::svm::data::processor::ProcessorData;
-use crate::svm::data::shared_data::SharedData;
-use crate::svm::vmexit::CPUID_DEVIRTUALIZE;
-use crate::svm::vmlaunch::launch_vm;
-use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
+use crate::{
+    dbg_break,
+    hook::Hook,
+    nt::{
+        include::Context,
+        memory::AllocatedMemory,
+        processor::{processor_count, ProcessorExecutor},
+    },
+    support,
+    support::is_virtualized,
+    svm::{
+        data::{msr_bitmap::EFER_SVME, processor::ProcessorData, shared_data::SharedData},
+        vmexit::CPUID_DEVIRTUALIZE,
+        vmlaunch::launch_vm,
+    },
+    KeBugCheck, MANUALLY_INITIATED_CRASH,
+};
 use alloc::vec::Vec;
-use x86::cpuid::cpuid;
-use x86::msr::{rdmsr, wrmsr, IA32_EFER};
+use x86::{
+    cpuid::cpuid,
+    msr::{rdmsr, wrmsr, IA32_EFER},
+};
 
 pub mod data;
 pub mod events;
@@ -51,8 +59,8 @@ impl Processors {
 
         let mut status = true;
         for processor in self.processors.iter_mut() {
-            // NOTE: We have to execute this in the loop and can't do it in the `virtualize` function
-            // for some reason. If we do, an access violation occurs.
+            // NOTE: We have to execute this in the loop and can't do it in the `virtualize`
+            // function for some reason. If we do, an access violation occurs.
             //
             let Some(executor) = ProcessorExecutor::switch_to_processor(processor.id()) else {
                 log::error!("Failed to switch to processor");
@@ -123,13 +131,15 @@ impl Processor {
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
 
-        // IMPORTANT: We have to capture the context right here, so that `launch_vm` continues the
-        // execution of the current process at this point of time. If we don't do this,
-        // weird things will happen since we will execute the guest at another point.
+        // IMPORTANT: We have to capture the context right here, so that `launch_vm`
+        // continues the execution of the current process at this point of time.
+        // If we don't do this, weird things will happen since we will execute
+        // the guest at another point.
         //
-        // This also makes sense why `vmsave` was crashing inside `prepare_for_virtualization`. It
-        // obviously entered the guest state and tried to execute from there on. And because of that,
-        // everything that happened afterwards is just undefined behaviour.
+        // This also makes sense why `vmsave` was crashing inside
+        // `prepare_for_virtualization`. It obviously entered the guest state
+        // and tried to execute from there on. And because of that, everything
+        // that happened afterwards is just undefined behaviour.
         //
         // Literally wasted like a whole day just because of this 1 line.
         //

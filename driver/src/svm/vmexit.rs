@@ -1,20 +1,23 @@
-use crate::debug::dbg_break;
-
-use crate::nt::addresses::{physical_address, PhysicalAddress};
-use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
-
-use crate::nt::ptr::Pointer;
-
-use crate::svm::data::guest::GuestRegisters;
-use crate::svm::data::msr_bitmap::EFER_SVME;
-use crate::svm::data::processor::ProcessorData;
-use crate::svm::events::EventInjection;
-use crate::svm::paging::AccessType;
-use crate::svm::vmcb::control_area::{NptExitInfo, TlbControl, VmExitCode, VmcbClean};
-use crate::HookType;
+use crate::{
+    debug::dbg_break,
+    nt::{
+        addresses::{physical_address, PhysicalAddress},
+        include::{KeBugCheck, MANUALLY_INITIATED_CRASH},
+        ptr::Pointer,
+    },
+    svm::{
+        data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor::ProcessorData},
+        events::EventInjection,
+        paging::AccessType,
+        vmcb::control_area::{NptExitInfo, TlbControl, VmExitCode, VmcbClean},
+    },
+    HookType,
+};
 use core::arch::asm;
-use x86::cpuid::cpuid;
-use x86::msr::{rdmsr, wrmsr, IA32_EFER};
+use x86::{
+    cpuid::cpuid,
+    msr::{rdmsr, wrmsr, IA32_EFER},
+};
 
 #[derive(PartialOrd, PartialEq)]
 pub enum ExitType {
@@ -109,9 +112,10 @@ pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> 
         // Otherwise, update the msr as requested.
         //
         // Note: The value should be checked beforehand to not allow any illegal values
-        // and inject a #GP as needed. If that is not done, the hypervisor attempts to resume
-        // the guest with an invalid EFER value and immediately receives #VMEXIT due to VMEXIT_INVALID.
-        // This would in this case, result in a bug check.
+        // and inject a #GP as needed. If that is not done, the hypervisor attempts to
+        // resume the guest with an invalid EFER value and immediately receives
+        // #VMEXIT due to VMEXIT_INVALID. This would in this case, result in a
+        // bug check.
         //
         // See `Extended Feature Enable Register (EFER)` for what values are allowed.
         // TODO: Implement this check
@@ -120,8 +124,9 @@ pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> 
     } else {
         // Execute rdmsr or wrmsr as requested by the guest.
         //
-        // Important: This can bug check if the guest tries to access an MSR that is not supported by
-        //            the host. See SimpleSvm for more information on how to handle this correctly.
+        // Important: This can bug check if the guest tries to access an MSR that is not
+        // supported by            the host. See SimpleSvm for more information
+        // on how to handle this correctly.
         //
         if write_access {
             let low_part = guest_regs.rax as u32;
@@ -152,8 +157,9 @@ pub fn handle_vmrun(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitTyp
 pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
-    // Find the handler address for the current instruction pointer (RIP) and transfer the execution
-    // to it. If we couldn't find a hook, we inject the #BP exception.
+    // Find the handler address for the current instruction pointer (RIP) and
+    // transfer the execution to it. If we couldn't find a hook, we inject the
+    // #BP exception.
     //
     if let Some(Some(handler)) = hooked_npt
         .find_hook_by_address(data.guest_vmcb.save_area.rip)
@@ -178,11 +184,13 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
     let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
 
-    // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault Ordering`
+    // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault
+    // Ordering`
     //
-    // Nested page faults are entirely a function of the nested page table and VMM processor mode. Nested
-    // faults cause a #VMEXIT(NPF) to the VMM. The faulting guest physical address is saved in the
-    // VMCB's EXITINFO2 field; EXITINFO1 delivers an error code similar to a #PF error code.
+    // Nested page faults are entirely a function of the nested page table and VMM
+    // processor mode. Nested faults cause a #VMEXIT(NPF) to the VMM. The
+    // faulting guest physical address is saved in the VMCB's EXITINFO2 field;
+    // EXITINFO1 delivers an error code similar to a #PF error code.
     //
     let faulting_pa = data.guest_vmcb.control_area.exit_info2;
     let exit_info = data.guest_vmcb.control_area.exit_info1;
@@ -206,7 +214,8 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
 
     // Check if there exists a hook for the faulting page.
     // - #1 - Yes: Guest tried to execute a function inside the hooked page.
-    // - #2 - No: Guest tried to execute code outside the hooked page (our hook has been exited).
+    // - #2 - No: Guest tried to execute code outside the hooked page (our hook has
+    //   been exited).
     //
     if let Some(hook_pa) = hooked_npt
         .find_hook(faulting_pa)
@@ -220,8 +229,9 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
 
         data.guest_vmcb.control_area.ncr3 = hooked_npt.rw_pml4.as_u64();
     } else {
-        // Just to be safe: Change the permission of the faulting pa to rwx again. I'm not sure why
-        // we need this, but if we don't do it, we'll get stuck at 'Launching vm'.
+        // Just to be safe: Change the permission of the faulting pa to rwx again. I'm
+        // not sure why we need this, but if we don't do it, we'll get stuck at
+        // 'Launching vm'.
         //
         hooked_npt.rwx_npt.change_page_permission(
             faulting_pa,
@@ -286,8 +296,7 @@ unsafe fn exit_hypervisor(data: &mut ProcessorData, guest_regs: &mut GuestRegist
 
 #[no_mangle]
 unsafe extern "stdcall" fn handle_vmexit(
-    mut data: Pointer<ProcessorData>,
-    mut guest_regs: Pointer<GuestRegisters>,
+    mut data: Pointer<ProcessorData>, mut guest_regs: Pointer<GuestRegisters>,
 ) -> u8 {
     // Load host state that is not loaded on #VMEXIT.
     //

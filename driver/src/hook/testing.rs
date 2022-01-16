@@ -1,8 +1,10 @@
-//! This modules contains some code to be able to test the hooking system easier.
+//! This modules contains some code to be able to test the hooking system
+//! easier.
 
-use crate::nt::addresses::PhysicalAddress;
-use crate::nt::memory::AllocatedMemory;
-use crate::FunctionHook;
+use crate::{
+    nt::{addresses::PhysicalAddress, memory::AllocatedMemory},
+    FunctionHook,
+};
 
 pub static mut ALLOCATED_MEMORY: Option<AllocatedMemory<u8>> = None;
 
@@ -97,8 +99,10 @@ pub static mut HOOK: Option<AllocatedMemory<FunctionHook>> = None;
 pub fn hook_handler(a: u64) -> u64 {
     log::info!("hook handler called");
 
-    // let trampoline = unsafe { crate::hook::HOOK.as_ref().unwrap().trampoline_address() };
-    // let trampoline_fn = unsafe { core::mem::transmute::<_, extern "C" fn(u64) -> u64>(trampoline) };
+    // let trampoline = unsafe {
+    // crate::hook::HOOK.as_ref().unwrap().trampoline_address() };
+    // let trampoline_fn = unsafe { core::mem::transmute::<_, extern "C" fn(u64) ->
+    // u64>(trampoline) };
     //
     // trampoline_fn(a + 2)
 

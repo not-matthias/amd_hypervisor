@@ -1,7 +1,8 @@
-use crate::nt::addresses::physical_address;
-use crate::nt::memory::AllocatedMemory;
-use crate::svm::paging::{AccessType, PFN_MASK, _2MB, _512GB};
-use crate::PhysicalMemoryDescriptor;
+use crate::{
+    nt::{addresses::physical_address, memory::AllocatedMemory},
+    svm::paging::{AccessType, PFN_MASK, _2MB, _512GB},
+    PhysicalMemoryDescriptor,
+};
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
@@ -25,14 +26,16 @@ const_assert_eq!(core::mem::size_of::<NestedPageTable>(), 0x40202000);
 const_assert!(core::mem::align_of::<NestedPageTable>() == 4096);
 
 impl NestedPageTable {
-    /// Creates the 2MB identity page table. Maps every guest physical address to the same host
-    /// physical address.
-    /// This means physical address 0x4000 in the guest will point to the physical memory 0x4000 in the host.
+    /// Creates the 2MB identity page table. Maps every guest physical address
+    /// to the same host physical address.
+    /// This means physical address 0x4000 in the guest will point to the
+    /// physical memory 0x4000 in the host.
     ///
     ///
     /// # How it works
     ///
-    /// We create a page table with **2MB** instead of **4KB** pages. There's multiple reasons for that:
+    /// We create a page table with **2MB** instead of **4KB** pages. There's
+    /// multiple reasons for that:
     /// - Smaller page table.
     /// - Iterating is faster since we remove 1 iteration.
     ///
@@ -42,17 +45,17 @@ impl NestedPageTable {
     ///
     /// Cons:
     /// - We probably don't need access to 512 GB of physical memory.
-    /// - Hooking 2MB pages is inconvenient, because we would get tons of ept violations.
+    /// - Hooking 2MB pages is inconvenient, because we would get tons of ept
+    ///   violations.
     ///
     /// # Other implementations
     ///
-    /// Even though other hypervisors might be built for Intel processors, they still need to build
-    /// some kind of [SLAT](https://en.wikipedia.org/wiki/Second_Level_Address_Translation) (Second Level Address Translation Table).
+    /// Even though other hypervisors might be built for Intel processors, they
+    /// still need to build some kind of [SLAT](https://en.wikipedia.org/wiki/Second_Level_Address_Translation) (Second Level Address Translation Table).
     ///
     /// Here's a list of useful references in popular projects:
     /// - [hvpp](https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L41)
     /// - [gbhv](https://github.com/Gbps/gbhv/blob/master/gbhv/ept.c#L167)
-    ///
     pub fn identity() -> Option<AllocatedMemory<Self>> {
         log::info!("Building nested page tables");
 
@@ -68,13 +71,13 @@ impl NestedPageTable {
 
         // PDPT
         //
-        // Note: We have to use unsafe here to make sure that we can get access to a mutable reference
-        // to the pdp entry. Otherwise we couldn't iterate over the pd entries, since there already
-        // exists a mutable reference.
+        // Note: We have to use unsafe here to make sure that we can get access to a
+        // mutable reference to the pdp entry. Otherwise we couldn't iterate
+        // over the pd entries, since there already exists a mutable reference.
         //
-        // Why do we need this? Because the arrays are both stored inside `self`, there could be
-        // accesses to other arrays that we are currently iterating over. This is NOT the case
-        // here, so we can use unsafe.
+        // Why do we need this? Because the arrays are both stored inside `self`, there
+        // could be accesses to other arrays that we are currently iterating
+        // over. This is NOT the case here, so we can use unsafe.
         //
         for (i, pdp) in unsafe { (*npt.inner().as_ptr()).pdp_entries.iter_mut().enumerate() } {
             let pa = physical_address(npt.pd_entries[i].as_ptr() as _);
@@ -99,8 +102,9 @@ impl NestedPageTable {
                 //
                 let pa = (i * PAGE_SIZE_ENTRIES + j) as u64;
 
-                // Mask to find the page frame number. We have to use this so that we can use `PDEntry`.
-                // This is the same as using a `bitflags` struct and setting the bits `21-51`.
+                // Mask to find the page frame number. We have to use this so that we can use
+                // `PDEntry`. This is the same as using a `bitflags` struct and
+                // setting the bits `21-51`.
                 //
                 let pfn = pa << 21 & PFN_MASK;
 
@@ -142,7 +146,8 @@ impl NestedPageTable {
         Some(npt)
     }
 
-    /// Builds the nested page table to cover for the entire physical memory address space.
+    /// Builds the nested page table to cover for the entire physical memory
+    /// address space.
     #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
     pub fn system(access_type: AccessType) -> Option<AllocatedMemory<Self>> {
         let desc = PhysicalMemoryDescriptor::new();
@@ -170,8 +175,9 @@ impl NestedPageTable {
 
     /// Splits a large 2MB page into 512 smaller 4KB pages.
     ///
-    /// This is needed to apply more granular hooks and to reduce the number of page faults
-    /// that occur when the guest tries to access a page that is hooked.
+    /// This is needed to apply more granular hooks and to reduce the number of
+    /// page faults that occur when the guest tries to access a page that is
+    /// hooked.
     ///
     /// See:
     /// - https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L245
@@ -289,8 +295,9 @@ impl NestedPageTable {
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
 
         if !pd_entry.is_present() {
-            // We already have the page frame number of the physical address, so we don't need
-            // to calculate it on our own. Just pass it to the page directory entry.
+            // We already have the page frame number of the physical address, so we don't
+            // need to calculate it on our own. Just pass it to the page
+            // directory entry.
             //
             let flags = access_type.pd_flags() | PDFlags::PS;
             *pd_entry = PDEntry::new(PAddr::from(host_pa), flags);
@@ -304,8 +311,9 @@ impl NestedPageTable {
         let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
 
         if !pt_entry.is_present() {
-            // We already have the page frame number of the physical address, so we don't need
-            // to calculate it on our own. Just pass it to the page table entry.
+            // We already have the page frame number of the physical address, so we don't
+            // need to calculate it on our own. Just pass it to the page table
+            // entry.
             //
             *pt_entry = PTEntry::new(PAddr::from(host_pa), access_type.pt_flags());
         }

@@ -10,9 +10,10 @@ pub const PFN_MASK: u64 = ((1 << MAXPHYADDR) - 1) & !0xfff;
 
 const RW: u64 = 0b1;
 
-/// The NX bit can only be set when the no-execute page-protection feature is enabled by setting
-/// EFER.NXE to 1 (see “Extended Feature Enable Register (EFER)” on page 56). If EFER.NXE=0, the
-/// NX bit is treated as reserved. In this case, a page-fault exception (#PF) occurs if the NX bit is not
+/// The NX bit can only be set when the no-execute page-protection feature is
+/// enabled by setting EFER.NXE to 1 (see “Extended Feature Enable Register
+/// (EFER)” on page 56). If EFER.NXE=0, the NX bit is treated as reserved. In
+/// this case, a page-fault exception (#PF) occurs if the NX bit is not
 /// cleared to 0.
 const NX: u64 = 0b1 << 63;
 
@@ -86,7 +87,8 @@ impl AccessType {
     }
 }
 
-/// Calculates how many pages are required to hold the specified number of bytes.
-pub macro bytes_to_pages($bytes: expr) {
+/// Calculates how many pages are required to hold the specified number of
+/// bytes.
+pub macro bytes_to_pages($bytes:expr) {
     ($bytes >> crate::svm::paging::PAGE_SHIFT) as usize
 }

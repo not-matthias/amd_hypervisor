@@ -1,14 +1,16 @@
-use crate::nt::include::Context;
-
+use crate::{
+    nt::include::Context,
+    svm::data::segmentation::{SegmentAttribute, SegmentDescriptor},
+};
 use core::arch::asm;
-use x86::controlregs::{cr2, cr3};
-
-use x86::msr::{rdmsr, IA32_EFER, IA32_PAT};
-
-use crate::svm::data::segmentation::{SegmentAttribute, SegmentDescriptor};
-
-use x86_64::instructions::tables::{sgdt, sidt};
-use x86_64::registers::control::{Cr0, Cr4};
+use x86::{
+    controlregs::{cr2, cr3},
+    msr::{rdmsr, IA32_EFER, IA32_PAT},
+};
+use x86_64::{
+    instructions::tables::{sgdt, sidt},
+    registers::control::{Cr0, Cr4},
+};
 
 // Size: 0x298
 #[repr(C)]

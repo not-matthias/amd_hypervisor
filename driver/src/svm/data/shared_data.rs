@@ -1,9 +1,9 @@
 extern crate alloc;
 
-use crate::hook::npt::DuplicateNptHook;
-use crate::nt::memory::AllocatedMemory;
-use crate::svm::data::msr_bitmap::MsrBitmap;
-use crate::Hook;
+use crate::{
+    hook::npt::DuplicateNptHook, nt::memory::AllocatedMemory, svm::data::msr_bitmap::MsrBitmap,
+    Hook,
+};
 use alloc::vec::Vec;
 
 #[repr(C)]

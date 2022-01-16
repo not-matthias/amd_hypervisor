@@ -5,16 +5,14 @@
 
 use core::mem::MaybeUninit;
 use nt::include::HANDLE;
-use winapi::shared::ntdef::LARGE_INTEGER;
-use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
-use winapi::shared::ntdef::PHANDLE;
-use winapi::shared::ntdef::PHYSICAL_ADDRESS;
-use winapi::shared::ntdef::PVOID;
 use winapi::{
     km::wdm::{KIRQL, KPROCESSOR_MODE, POOL_TYPE},
     shared::{
         basetsd::SIZE_T,
-        ntdef::{NTSTATUS, PGROUP_AFFINITY, PPROCESSOR_NUMBER},
+        ntdef::{
+            LARGE_INTEGER, NTSTATUS, OBJECT_ATTRIBUTES, PGROUP_AFFINITY, PHANDLE, PHYSICAL_ADDRESS,
+            PPROCESSOR_NUMBER, PVOID,
+        },
     },
     um::winnt::PCONTEXT,
 };
@@ -32,9 +30,7 @@ extern "system" {
     pub fn memset(Dst: PVOID, Val: u64, Size: usize) -> PVOID;
 
     pub fn RtlInitializeBitMap(
-        BitMapHeader: PRTL_BITMAP,
-        BitMapBuffer: *mut u32,
-        SizeOfBitMap: u32,
+        BitMapHeader: PRTL_BITMAP, BitMapBuffer: *mut u32, SizeOfBitMap: u32,
     );
 
     pub fn RtlClearAllBits(BitMapHeader: PRTL_BITMAP);
@@ -47,8 +43,7 @@ extern "system" {
         -> NTSTATUS;
 
     pub fn KeSetSystemGroupAffinityThread(
-        Affinity: PGROUP_AFFINITY,
-        PreviousAffinity: PGROUP_AFFINITY,
+        Affinity: PGROUP_AFFINITY, PreviousAffinity: PGROUP_AFFINITY,
     );
 
     pub fn KeRevertToUserGroupAffinityThread(PreviousAffinity: PGROUP_AFFINITY);
@@ -58,12 +53,9 @@ extern "system" {
     pub fn MmGetPhysicalAddress(BaseAddress: PVOID) -> PHYSICAL_ADDRESS;
 
     pub fn MmAllocateContiguousMemorySpecifyCacheNode(
-        NumberOfBytes: SIZE_T,
-        LowestAcceptableAddress: PHYSICAL_ADDRESS,
-        HighestAcceptableAddress: PHYSICAL_ADDRESS,
-        BoundaryAddressMultiple: PHYSICAL_ADDRESS,
-        CacheType: MEMORY_CACHING_TYPE,
-        PreferredNode: NODE_REQUIREMENT,
+        NumberOfBytes: SIZE_T, LowestAcceptableAddress: PHYSICAL_ADDRESS,
+        HighestAcceptableAddress: PHYSICAL_ADDRESS, BoundaryAddressMultiple: PHYSICAL_ADDRESS,
+        CacheType: MEMORY_CACHING_TYPE, PreferredNode: NODE_REQUIREMENT,
     ) -> PVOID;
 
     pub fn MmFreeContiguousMemory(BaseAddress: PVOID);

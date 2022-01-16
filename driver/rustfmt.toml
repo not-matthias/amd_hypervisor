@@ -1,0 +1,20 @@
+# https://github.com/rust-lang/rustfmt/blob/master/Configurations.md
+edition = "2021"
+
+brace_style                     = "PreferSameLine"
+color                           = "Always"
+fn_args_layout                  = "Compressed"
+format_code_in_doc_comments     = true
+format_macro_matchers           = true
+format_macro_bodies             = true
+format_strings                  = true
+group_imports                   = "One"
+imports_granularity             = "Crate"
+inline_attribute_width          = 80
+normalize_doc_attributes        = true
+reorder_impl_items              = true
+reorder_imports                 = true
+reorder_modules                 = true
+use_field_init_shorthand        = true
+where_single_line               = true
+wrap_comments                   = true

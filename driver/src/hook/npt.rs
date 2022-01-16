@@ -1,16 +1,17 @@
-use crate::nt::addresses::PhysicalAddress;
-use crate::nt::memory::AllocatedMemory;
-use crate::svm::data::nested_page_table::NestedPageTable;
-use crate::svm::paging::AccessType;
-use crate::{Hook, HookType};
+use crate::{
+    nt::{addresses::PhysicalAddress, memory::AllocatedMemory},
+    svm::{data::nested_page_table::NestedPageTable, paging::AccessType},
+    Hook, HookType,
+};
 use alloc::vec::Vec;
 
 pub struct DuplicateNptHook {
     pub rwx_npt: AllocatedMemory<NestedPageTable>,
     pub rwx_pml4: PhysicalAddress,
 
-    /// This is the nested page table, where the hooked pages are set to RWX and the original pages
-    /// are set to RW. Because of this, we can detect when the hooked page has been left.
+    /// This is the nested page table, where the hooked pages are set to RWX and
+    /// the original pages are set to RW. Because of this, we can detect
+    /// when the hooked page has been left.
     pub rw_npt: AllocatedMemory<NestedPageTable>,
     pub rw_pml4: PhysicalAddress,
 
@@ -60,10 +61,10 @@ impl DuplicateNptHook {
     ///
     /// ## Assumptions
     ///
-    /// Both pages have to be 4kb pages, because the comparison is done by comparing the base page
-    /// aligned physical addresses. This will most likely not be a problem, because we only use
-    /// 4kb pages for hooks anyways.
-    ///
+    /// Both pages have to be 4kb pages, because the comparison is done by
+    /// comparing the base page aligned physical addresses. This will most
+    /// likely not be a problem, because we only use 4kb pages for hooks
+    /// anyways.
     pub fn find_hook(&self, faulting_pa: u64) -> Option<&Hook> {
         let faulting_pa = PhysicalAddress::from_pa(faulting_pa);
         let faulting_pa = faulting_pa.align_down_to_base_page();

@@ -1,14 +1,10 @@
-use crate::nt::inline_hook::FunctionHook;
-use crate::nt::ptr::Pointer;
+use crate::nt::{inline_hook::FunctionHook, ptr::Pointer};
 use nt::include::{PULONG, PVOID, SYSTEM_INFORMATION_CLASS, ULONG};
-
 use winapi::shared::ntdef::NTSTATUS;
 
 pub static mut ZWQSI_ORIGINAL: Option<Pointer<FunctionHook>> = None;
 pub fn zw_query_system_information(
-    system_information_class: u32,
-    system_information: PVOID,
-    system_information_length: ULONG,
+    system_information_class: u32, system_information: PVOID, system_information_length: ULONG,
     return_length: PULONG,
 ) -> NTSTATUS {
     const_assert!(core::mem::size_of::<SYSTEM_INFORMATION_CLASS>() == 0x4);

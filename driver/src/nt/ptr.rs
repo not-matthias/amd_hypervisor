@@ -1,12 +1,13 @@
-use core::ops::{Deref, DerefMut};
-use core::ptr::NonNull;
+use core::{
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+};
 
 /// Non-null pointer type.
 ///
-/// This is just a wrapper around `NonNull` with implementations for `Deref` and `DerefMut`. This
-/// also has some additional helper functions with the most common use cases to make life a little
-/// easier.
-///
+/// This is just a wrapper around `NonNull` with implementations for `Deref` and
+/// `DerefMut`. This also has some additional helper functions with the most
+/// common use cases to make life a little easier.
 #[repr(transparent)]
 pub struct Pointer<T>(pub NonNull<T>);
 

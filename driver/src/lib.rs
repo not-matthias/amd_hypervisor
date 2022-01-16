@@ -15,23 +15,27 @@
 
 extern crate alloc;
 
-#[macro_use]
-extern crate static_assertions;
+#[macro_use] extern crate static_assertions;
 
-use crate::debug::dbg_break;
-use crate::hook::{handlers, testing, Hook, HookType};
-use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
-use crate::nt::inline_hook::FunctionHook;
-use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
-use crate::nt::ptr::Pointer;
-use crate::svm::Processors;
-use alloc::vec;
-use alloc::vec::Vec;
+use crate::{
+    debug::dbg_break,
+    hook::{handlers, testing, Hook, HookType},
+    nt::{
+        include::{KeBugCheck, MANUALLY_INITIATED_CRASH},
+        inline_hook::FunctionHook,
+        physmem_descriptor::PhysicalMemoryDescriptor,
+        ptr::Pointer,
+    },
+    svm::Processors,
+};
+use alloc::{vec, vec::Vec};
 use log::{KernelLogger, LevelFilter};
-use winapi::km::wdm::DRIVER_OBJECT;
-use winapi::shared::{
-    ntdef::{NTSTATUS, PVOID},
-    ntstatus::*,
+use winapi::{
+    km::wdm::DRIVER_OBJECT,
+    shared::{
+        ntdef::{NTSTATUS, PVOID},
+        ntstatus::*,
+    },
 };
 
 pub mod debug;
@@ -69,9 +73,9 @@ fn init_hooks() -> Option<Vec<Hook>> {
     // )?;
     // unsafe {
     //     handlers::EAPWT_ORIGINAL = match eapwt_hook.hook_type {
-    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-    //         HookType::Page => unreachable!(),
-    //     };
+    //         HookType::Function { ref inline_hook } =>
+    // Pointer::new(inline_hook.as_ptr()),         HookType::Page =>
+    // unreachable!(),     };
     // }
 
     // // MmIsAddressValid

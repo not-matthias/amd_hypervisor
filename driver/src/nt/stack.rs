@@ -2,10 +2,7 @@ use crate::nt::include::RtlCaptureContext;
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
 use nt::include::MmIsAddressValid;
-use winapi::um::winnt::RtlLookupFunctionEntry;
-use winapi::um::winnt::RtlVirtualUnwind;
-use winapi::um::winnt::CONTEXT;
-use winapi::um::winnt::UNW_FLAG_NHANDLER;
+use winapi::um::winnt::{RtlLookupFunctionEntry, RtlVirtualUnwind, CONTEXT, UNW_FLAG_NHANDLER};
 
 fn get_context() -> CONTEXT {
     let mut context = MaybeUninit::<CONTEXT>::uninit();
@@ -34,7 +31,8 @@ pub fn return_address_by_rip(rip: u64) -> Option<u64> {
         return None;
     }
 
-    // Create a new context, which will store the return address (and other registers).
+    // Create a new context, which will store the return address (and other
+    // registers).
     //
     let mut new_context = MaybeUninit::<CONTEXT>::uninit();
     unsafe { RtlCaptureContext(new_context.as_mut_ptr()) };
@@ -87,7 +85,6 @@ pub fn top_return_address(rsp: u64) -> Option<u64> {
 ///
 /// - https://hikalium.github.io/opv86/?q=call
 /// - https://www.felixcloutier.com/x86/call
-///
 pub fn find_return_addresses(rsp: u64) -> Option<Vec<u64>> {
     const MAX_DEPTH: usize = 15;
 

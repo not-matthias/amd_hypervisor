@@ -1,10 +1,11 @@
 extern crate alloc;
 
-use crate::nt::addresses::PhysicalAddress;
-use crate::nt::include::{assert_paged_code, RtlCopyMemory};
-use crate::nt::inline_hook::FunctionHook;
-use crate::nt::memory::AllocatedMemory;
-
+use crate::nt::{
+    addresses::PhysicalAddress,
+    include::{assert_paged_code, RtlCopyMemory},
+    inline_hook::FunctionHook,
+    memory::AllocatedMemory,
+};
 use nt::kernel::get_system_routine_address;
 use x86::bits64::paging::{PAddr, VAddr, BASE_PAGE_SIZE};
 use x86_64::instructions::interrupts::without_interrupts;
@@ -25,12 +26,11 @@ pub enum HookType {
 
 pub struct Hook {
     // Addresses of the original function / page.
-    //
     pub original_va: u64,
     pub original_pa: PhysicalAddress,
 
-    // Addresses of the copied page. If it's a function, the exact location inside the page is stored.
-    //
+    // Addresses of the copied page. If it's a function, the exact location inside the page is
+    // stored.
     pub hook_va: u64,
     pub hook_pa: PhysicalAddress,
 
@@ -46,8 +46,9 @@ impl Hook {
     ///
     /// ## Why does this code have to be paged?
     ///
-    /// Because otherwise the code could be paged out, which will result in a page fault. We must
-    /// make sure, that this code must be called at IRQL < DISPATCH_LEVEL.
+    /// Because otherwise the code could be paged out, which will result in a
+    /// page fault. We must make sure, that this code must be called at IRQL
+    /// < DISPATCH_LEVEL.
     ///
     /// For more information, see the official docs:https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/when-should-code-and-data-be-pageable-
     fn copy_page(address: u64) -> Option<AllocatedMemory<u8>> {

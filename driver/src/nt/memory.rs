@@ -4,11 +4,14 @@ use crate::nt::include::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
     MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
-use core::ops::{Deref, DerefMut};
-use core::ptr::NonNull;
+use core::{
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+};
 use nt::include::MmIsAddressValid;
-use winapi::um::winnt::RtlZeroMemory;
-use winapi::{km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS};
+use winapi::{
+    km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS, um::winnt::RtlZeroMemory,
+};
 use x86::bits64::paging::{VAddr, BASE_PAGE_SIZE};
 
 #[derive(Debug)]
@@ -20,10 +23,10 @@ pub enum AllocType {
 
 /// Allocated memory that can never be null.
 ///
-/// It will also automatically be deallocated when dropped. `Deref` and `DerefMut` have been
-/// implemented to abstract the memory and actual code behind it away. Because of this and
-/// generics, we can have any abstract data allocated.
-///
+/// It will also automatically be deallocated when dropped. `Deref` and
+/// `DerefMut` have been implemented to abstract the memory and actual code
+/// behind it away. Because of this and generics, we can have any abstract data
+/// allocated.
 #[repr(C)]
 pub struct AllocatedMemory<T>(NonNull<T>, AllocType);
 
@@ -127,7 +130,8 @@ impl<T> AllocatedMemory<T> {
         core::mem::drop(self);
     }
 
-    /// Checks whether the underlying memory buffer is null and whether the address pointing to it is valid.
+    /// Checks whether the underlying memory buffer is null and whether the
+    /// address pointing to it is valid.
     pub fn is_valid(&self) -> bool {
         unsafe { MmIsAddressValid(self.0.as_ref() as *const _ as _) }
     }

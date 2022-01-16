@@ -1,13 +1,15 @@
-use crate::nt::include::{KeInvalidateAllCaches, RtlCopyMemory};
-use crate::nt::memory::AllocatedMemory;
-use alloc::vec;
-use alloc::vec::Vec;
+use crate::nt::{
+    include::{KeInvalidateAllCaches, RtlCopyMemory},
+    memory::AllocatedMemory,
+};
+use alloc::{vec, vec::Vec};
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, InstructionBlock,
 };
-use nt::include::KPROCESSOR_MODE::KernelMode;
-use nt::include::LOCK_OPERATION::IoReadAccess;
-use nt::include::{IoAllocateMdl, IoFreeMdl, MmProbeAndLockPages, MmUnlockPages, PMDL};
+use nt::include::{
+    IoAllocateMdl, IoFreeMdl, MmProbeAndLockPages, MmUnlockPages, KPROCESSOR_MODE::KernelMode,
+    LOCK_OPERATION::IoReadAccess, PMDL,
+};
 use snafu::prelude::*;
 use x86::bits64::paging::BASE_PAGE_SIZE;
 
@@ -67,12 +69,10 @@ impl FunctionHook {
     ///
     /// ## Note
     ///
-    /// Note: We have to allocate a new instance here, so that it's valid after the virtualization. Otherwise,
-    /// all the addresses would be 0x0.
+    /// Note: We have to allocate a new instance here, so that it's valid after
+    /// the virtualization. Otherwise, all the addresses would be 0x0.
     pub fn new(
-        original_address: u64,
-        hook_address: u64,
-        handler: *const (),
+        original_address: u64, hook_address: u64, handler: *const (),
     ) -> Option<AllocatedMemory<Self>> {
         log::info!(
             "Creating a new inline hook. Address: {:x}, handler: {:x}",
@@ -110,9 +110,10 @@ impl FunctionHook {
             }
         };
 
-        // Lock the virtual address. The specified hook address can/will be tradable pagable memory
-        // or where its physical address can be changed by the Memory Manager at any time. We need to
-        // prevent that because we assume permanent 1:1 mapping of the hook virtual and physical addresses.
+        // Lock the virtual address. The specified hook address can/will be tradable
+        // pagable memory or where its physical address can be changed by the
+        // Memory Manager at any time. We need to prevent that because we assume
+        // permanent 1:1 mapping of the hook virtual and physical addresses.
         //
         let mdl = unsafe {
             IoAllocateMdl(
@@ -155,9 +156,10 @@ impl FunctionHook {
             self.trampoline_address(),
         );
 
-        // Note: In order for this to work, we have to use an heap allocated instance instead of
-        // a stack allocated one. Otherwise, the stack will be invalidated after the virtualization of
-        // the current processor. After that, all the variables will be set to 0.
+        // Note: In order for this to work, we have to use an heap allocated instance
+        // instead of a stack allocated one. Otherwise, the stack will be
+        // invalidated after the virtualization of the current processor. After
+        // that, all the variables will be set to 0.
         //
         unsafe {
             RtlCopyMemory(
@@ -187,14 +189,14 @@ impl FunctionHook {
     /// jmp_addr: dq 0xDEADBEEF
     /// ```
     ///
-    /// The core premise behind it is, that we jump to the address that is right after the current
-    /// instruction.  
+    /// The core premise behind it is, that we jump to the address that is right
+    /// after the current instruction.  
     ///
     /// ## Why use this instead of `mov rax, jmp rax`?
     ///
-    /// This shellcode has one very important feature: **It doesn't require any registers to store the
-    /// jmp address**. And because of that, we don't have to fear overwriting some register values.
-    ///
+    /// This shellcode has one very important feature: **It doesn't require any
+    /// registers to store the jmp address**. And because of that, we don't
+    /// have to fear overwriting some register values.
     fn jmp_shellcode(target_address: u64) -> [u8; 14] {
         log::info!(
             "Creating the jmp shellcode for address: {:#x}",
@@ -216,29 +218,29 @@ impl FunctionHook {
 
     /// Creates a trampoline shellcode that jumps to the original function.
     ///
-    /// NOTE: The trampoline doesn't support RIP-relative instructions. If any of these relative instructions
-    /// are found, `InlineHookError::RelativeInstruction` will be returned.
+    /// NOTE: The trampoline doesn't support RIP-relative instructions. If any
+    /// of these relative instructions are found,
+    /// `InlineHookError::RelativeInstruction` will be returned.
     ///
     /// ## Parameters
     ///
-    /// - `original_address`: The address of the original function (on the real page).
+    /// - `original_address`: The address of the original function (on the real
+    ///   page).
     /// - `address`: The address of function in the copied page.
     /// - `size`: The minimum size of the trampoline.
     ///
     /// ## Returns
     ///
     /// The trampoline shellcode.
-    ///
     fn trampoline_shellcode(
-        original_address: u64,
-        address: u64,
-        required_size: usize,
+        original_address: u64, address: u64, required_size: usize,
     ) -> Result<AllocatedMemory<u8>, FunctionHookError> {
         log::info!("Creating the trampoline for function: {:#x}", address);
 
-        // Read bytes from function and decode them. Read 2 times the amount needed, in case there are
-        // bigger instructions that take more space. If there's only 1 byte needed, we read 15 bytes
-        // instead so that we can find the first few valid instructions.
+        // Read bytes from function and decode them. Read 2 times the amount needed, in
+        // case there are bigger instructions that take more space. If there's
+        // only 1 byte needed, we read 15 bytes instead so that we can find the
+        // first few valid instructions.
         //
         let bytes = unsafe {
             core::slice::from_raw_parts(address as *mut u8, usize::max(required_size * 2, 15))
@@ -300,9 +302,10 @@ impl FunctionHook {
             .map_err(|_| FunctionHookError::EncodingFailed)?;
         log::info!("Encoded trampoline: {:x?}", encoded);
 
-        // Add jmp to the original function at the end. We can't use `address` for this, because
-        // the page will probably contain rip-relative instructions. And we already switch the page
-        // So the shadow page will be at the address of the original page.
+        // Add jmp to the original function at the end. We can't use `address` for this,
+        // because the page will probably contain rip-relative instructions. And
+        // we already switch the page So the shadow page will be at the address
+        // of the original page.
         //
         let jmp_back_address = original_address + encoded.len() as u64;
         let jmp_shellcode = Self::jmp_shellcode(jmp_back_address);
