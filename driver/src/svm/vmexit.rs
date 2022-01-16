@@ -6,7 +6,7 @@ use crate::{
         ptr::Pointer,
     },
     svm::{
-        data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor::ProcessorData},
+        data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor_data::ProcessorData},
         events::EventInjection,
         paging::AccessType,
         vmcb::control_area::{NptExitInfo, TlbControl, VmExitCode, VmcbClean},
