@@ -71,7 +71,7 @@ impl<T> AllocatedMemory<T> {
 
         // Make sure it's aligned
         //
-        if VAddr::from_u64(memory.as_ptr() as u64).is_base_page_aligned() {
+        if !VAddr::from_u64(memory.as_ptr() as u64).is_base_page_aligned() {
             log::warn!("Memory is not aligned to a page");
             return None;
         }
