@@ -6,13 +6,16 @@ use winapi::shared::ntdef::NTSTATUS;
 
 pub static mut ZWQSI_ORIGINAL: Option<Pointer<InlineHook>> = None;
 pub fn zw_query_system_information(
-    system_information_class: SYSTEM_INFORMATION_CLASS,
+    system_information_class: u32,
     system_information: PVOID,
     system_information_length: ULONG,
     return_length: PULONG,
 ) -> NTSTATUS {
+    const_assert!(core::mem::size_of::<SYSTEM_INFORMATION_CLASS>() == 0x4);
+
     log::info!(
-        "Called zw_query_system_information({:x}, {:x}, {:p})",
+        "Called zw_query_system_information({:?}, {:x}, {:x}, {:p})",
+        system_information_class,
         system_information as u64,
         system_information_length,
         return_length
@@ -21,11 +24,10 @@ pub fn zw_query_system_information(
     // Call original
     //
     let fn_ptr = unsafe {
-        core::mem::transmute::<_, fn(SYSTEM_INFORMATION_CLASS, PVOID, ULONG, PULONG) -> NTSTATUS>(
+        core::mem::transmute::<_, fn(u32, PVOID, ULONG, PULONG) -> NTSTATUS>(
             ZWQSI_ORIGINAL.as_ref().unwrap().trampoline_address(),
         )
     };
-    log::info!("Calling original: {:x}", fn_ptr as u64);
 
     fn_ptr(
         system_information_class,
