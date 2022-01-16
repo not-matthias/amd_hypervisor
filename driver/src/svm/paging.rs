@@ -1,7 +1,5 @@
 use crate::nt::addresses::PhysicalAddress;
 
-use core::ops::BitOrAssign;
-
 use x86::bits64::paging::{PDFlags, PDPTFlags, PML4Entry, PML4Flags, PTFlags, MAXPHYADDR};
 
 pub const _512GB: u64 = 512 * 1024 * 1024 * 1024;
@@ -30,34 +28,22 @@ const NX: u64 = 0b1 << 63;
 impl AccessType {
     pub fn pml4_flags(self) -> PML4Flags {
         match self {
-            AccessType::ReadWrite => {
-                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US, PML4Flags::XD])
-            }
-            AccessType::ReadWriteExecute => {
-                PML4Flags::from_iter([PML4Flags::P, PML4Flags::RW, PML4Flags::US])
-            }
+            AccessType::ReadWrite => PML4Flags::P | PML4Flags::RW | PML4Flags::US | PML4Flags::XD,
+            AccessType::ReadWriteExecute => PML4Flags::P | PML4Flags::RW | PML4Flags::US,
         }
     }
 
     pub fn pdpt_flags(self) -> PDPTFlags {
         match self {
-            AccessType::ReadWrite => {
-                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US, PDPTFlags::XD])
-            }
-            AccessType::ReadWriteExecute => {
-                PDPTFlags::from_iter([PDPTFlags::P, PDPTFlags::RW, PDPTFlags::US])
-            }
+            AccessType::ReadWrite => PDPTFlags::P | PDPTFlags::RW | PDPTFlags::US | PDPTFlags::XD,
+            AccessType::ReadWriteExecute => PDPTFlags::P | PDPTFlags::RW | PDPTFlags::US,
         }
     }
 
     pub fn pd_flags(self) -> PDFlags {
         match self {
-            AccessType::ReadWrite => {
-                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US, PDFlags::XD])
-            }
-            AccessType::ReadWriteExecute => {
-                PDFlags::from_iter([PDFlags::P, PDFlags::RW, PDFlags::US])
-            }
+            AccessType::ReadWrite => PDFlags::P | PDFlags::RW | PDFlags::US | PDFlags::XD,
+            AccessType::ReadWriteExecute => PDFlags::P | PDFlags::RW | PDFlags::US,
         }
     }
 
@@ -100,23 +86,6 @@ impl AccessType {
         }
 
         flags
-    }
-}
-
-impl BitOrAssign<AccessType> for u64 {
-    fn bitor_assign(&mut self, rhs: AccessType) {
-        // Insert: self |= other;
-        // Remove: self &= !other;
-        //
-        match rhs {
-            AccessType::ReadWrite => {
-                *self |= RW | NX;
-            }
-            AccessType::ReadWriteExecute => {
-                *self |= RW;
-                *self &= !NX;
-            }
-        }
     }
 }
 
