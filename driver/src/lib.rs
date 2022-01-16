@@ -11,6 +11,7 @@
 #![feature(const_ptr_as_ref)]
 #![feature(const_trait_impl)]
 #![feature(int_abs_diff)]
+#![feature(alloc_error_handler)]
 #![allow(clippy::new_ret_no_self)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
@@ -47,7 +48,7 @@ pub mod svm;
 pub mod utils;
 
 #[global_allocator]
-static GLOBAL: km_alloc::KernelAlloc = km_alloc::KernelAlloc;
+static GLOBAL: utils::alloc::KernelAlloc = utils::alloc::KernelAlloc;
 static LOGGER: KernelLogger = KernelLogger;
 
 static mut PROCESSORS: Option<Processors> = None;
