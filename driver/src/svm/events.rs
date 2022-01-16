@@ -34,8 +34,6 @@ bitfield! {
 
 impl EventInjection {
     /// See `8 Exceptions and Interrupts > 8.2 Vectors > 8.2.14 #GP`.
-    ///
-    ///
     pub fn gp() -> Self {
         let mut event = EventInjection(0);
         event.set_vector(13); // #GP
@@ -46,10 +44,17 @@ impl EventInjection {
         event
     }
 
+    pub fn bp() -> Self {
+        let mut event = EventInjection(0);
+        event.set_vector(3); // #BP
+        event.set_type(3); // Exception
+        event.set_valid(1);
+
+        event
+    }
+
     /// Injects the current event into the guest vmcb.
-    pub fn inject(&self, data: *mut ProcessorData) {
-        unsafe {
-            (*data).guest_vmcb.control_area.event_inj = self.0;
-        }
+    pub fn inject(&self, data: &mut ProcessorData) {
+        data.guest_vmcb.control_area.event_inj = self.0;
     }
 }

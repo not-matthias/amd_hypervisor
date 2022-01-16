@@ -1,19 +1,25 @@
-use crate::nt::memory::AllocatedMemory;
-use crate::svm::data::msr_bitmap::MsrBitmap;
-use crate::svm::data::nested_page_table::NestedPageTable;
+extern crate alloc;
 
+use crate::{
+    hook::npt::DuplicateNptHook, nt::memory::AllocatedMemory, svm::data::msr_bitmap::MsrBitmap,
+    Hook,
+};
+use alloc::vec::Vec;
+
+#[repr(C)]
 pub struct SharedData {
-    pub msr_permission_map: MsrBitmap,
-    pub npt: AllocatedMemory<NestedPageTable>,
+    pub msr_permission_map: AllocatedMemory<u32>,
+    pub hooked_npt: AllocatedMemory<DuplicateNptHook>,
 }
 
 impl SharedData {
-    pub fn new() -> Option<Self> {
+    pub fn new(hooks: Vec<Hook>) -> Option<AllocatedMemory<Self>> {
         log::info!("Creating shared data");
 
-        Some(Self {
-            msr_permission_map: MsrBitmap::new()?.build(),
-            npt: unsafe { NestedPageTable::new()?.build() },
-        })
+        let mut data = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
+        data.msr_permission_map = MsrBitmap::new()?;
+        data.hooked_npt = DuplicateNptHook::new(hooks)?;
+
+        Some(data)
     }
 }

@@ -3,17 +3,16 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
-use bitflags::bitflags;
 use core::mem::MaybeUninit;
 use nt::include::HANDLE;
-use winapi::shared::ntdef::OBJECT_ATTRIBUTES;
-use winapi::shared::ntdef::PHANDLE;
-use winapi::shared::ntdef::PVOID;
 use winapi::{
     km::wdm::{KIRQL, KPROCESSOR_MODE, POOL_TYPE},
     shared::{
         basetsd::SIZE_T,
-        ntdef::{NTSTATUS, PGROUP_AFFINITY, PHYSICAL_ADDRESS, PPROCESSOR_NUMBER},
+        ntdef::{
+            LARGE_INTEGER, NTSTATUS, OBJECT_ATTRIBUTES, PGROUP_AFFINITY, PHANDLE, PHYSICAL_ADDRESS,
+            PPROCESSOR_NUMBER, PVOID,
+        },
     },
     um::winnt::PCONTEXT,
 };
@@ -31,9 +30,7 @@ extern "system" {
     pub fn memset(Dst: PVOID, Val: u64, Size: usize) -> PVOID;
 
     pub fn RtlInitializeBitMap(
-        BitMapHeader: PRTL_BITMAP,
-        BitMapBuffer: *mut u32,
-        SizeOfBitMap: u32,
+        BitMapHeader: PRTL_BITMAP, BitMapBuffer: *mut u32, SizeOfBitMap: u32,
     );
 
     pub fn RtlClearAllBits(BitMapHeader: PRTL_BITMAP);
@@ -46,8 +43,7 @@ extern "system" {
         -> NTSTATUS;
 
     pub fn KeSetSystemGroupAffinityThread(
-        Affinity: PGROUP_AFFINITY,
-        PreviousAffinity: PGROUP_AFFINITY,
+        Affinity: PGROUP_AFFINITY, PreviousAffinity: PGROUP_AFFINITY,
     );
 
     pub fn KeRevertToUserGroupAffinityThread(PreviousAffinity: PGROUP_AFFINITY);
@@ -57,19 +53,14 @@ extern "system" {
     pub fn MmGetPhysicalAddress(BaseAddress: PVOID) -> PHYSICAL_ADDRESS;
 
     pub fn MmAllocateContiguousMemorySpecifyCacheNode(
-        NumberOfBytes: SIZE_T,
-        LowestAcceptableAddress: PHYSICAL_ADDRESS,
-        HighestAcceptableAddress: PHYSICAL_ADDRESS,
-        BoundaryAddressMultiple: PHYSICAL_ADDRESS,
-        CacheType: MEMORY_CACHING_TYPE,
-        PreferredNode: NODE_REQUIREMENT,
+        NumberOfBytes: SIZE_T, LowestAcceptableAddress: PHYSICAL_ADDRESS,
+        HighestAcceptableAddress: PHYSICAL_ADDRESS, BoundaryAddressMultiple: PHYSICAL_ADDRESS,
+        CacheType: MEMORY_CACHING_TYPE, PreferredNode: NODE_REQUIREMENT,
     ) -> PVOID;
 
     pub fn MmFreeContiguousMemory(BaseAddress: PVOID);
 
-    pub fn KeBugCheck(BugCheckCode: u32);
-
-    pub fn KeGetCurrentIrql() -> KIRQL;
+    pub fn KeBugCheck(BugCheckCode: u32) -> !;
 
     pub fn ZwYieldExecution() -> NTSTATUS;
 
@@ -82,6 +73,16 @@ extern "system" {
         StartRoutine: *const (), // *const KSTART_ROUTINE
         StartContext: *mut u64,
     ) -> NTSTATUS;
+
+    pub fn MmGetPhysicalMemoryRanges() -> *mut PHYSICAL_MEMORY_RANGE;
+
+    pub fn MmGetVirtualForPhysical(PhysicalAddress: PHYSICAL_ADDRESS) -> *mut u64;
+
+    pub fn RtlCopyMemory(destination: *mut u64, source: *mut u64, length: usize);
+
+    pub fn ExAllocatePoolWithTag(PoolType: u32, NumberOfBytes: usize, Tag: u32) -> u64;
+
+    pub fn KeInvalidateAllCaches() -> bool;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes
@@ -89,6 +90,12 @@ pub const MANUALLY_INITIATED_CRASH: u32 = 0x000000E2;
 
 pub const MM_ANY_NODE_OK: u32 = 0x80000000;
 pub type NODE_REQUIREMENT = u32;
+
+#[repr(C)]
+pub struct PHYSICAL_MEMORY_RANGE {
+    pub base_address: PHYSICAL_ADDRESS,
+    pub number_of_bytes: LARGE_INTEGER,
+}
 
 #[repr(C)]
 pub struct RTL_BITMAP {
@@ -398,4 +405,12 @@ impl Context {
 
         unsafe { context.assume_init() }
     }
+}
+
+pub macro assert_paged_code() {
+    #[cfg(not(feature = "no-assertions"))]
+    assert!(
+        unsafe { $crate::nt::irql::KeGetCurrentIrql() } <= $crate::nt::irql::APC_LEVEL,
+        "Called at IRQL > APC_LEVEL",
+    );
 }

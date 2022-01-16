@@ -1,7 +1,9 @@
 //! Checks whether the current system is able to run the hypervisor.
 
-use x86::cpuid::{CpuId, Hypervisor};
-use x86::msr::rdmsr;
+use x86::{
+    cpuid::{CpuId, Hypervisor},
+    msr::rdmsr,
+};
 
 /// Checks whether svm is supported by the processor.
 ///
@@ -50,7 +52,10 @@ pub fn is_svm_supported() -> bool {
         .map(|svm_info| svm_info.has_svm_lock())
         .unwrap_or_default()
     {
-        log::warn!("SVM is locked at BIOS level. You must change a platform firmware setting to enable SVM.");
+        log::warn!(
+            "SVM is locked at BIOS level. You must change a platform firmware setting to enable \
+             SVM."
+        );
     } else {
         log::warn!(
             "SVMLock may be unlockable; consult platform firmware or TPM to obtain the key."

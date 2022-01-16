@@ -1,13 +1,12 @@
 use bitflags::bitflags;
 
-// Size: 0x400
 #[repr(C)]
 pub struct ControlArea {
-    pub intercept_cr_read: u16,   // +0x000
-    pub intercept_cr_write: u16,  // +0x002
-    pub intercept_dr_read: u16,   // +0x004
-    pub intercept_dr_write: u16,  // +0x006
-    pub intercept_exception: u32, // +0x008
+    pub intercept_cr_read: u16,               // +0x000
+    pub intercept_cr_write: u16,              // +0x002
+    pub intercept_dr_read: u16,               // +0x004
+    pub intercept_dr_write: u16,              // +0x006
+    pub intercept_exception: ExceptionVector, // +0x008
 
     pub intercept_misc1: InterceptMisc1,     // +0x00c
     pub intercept_misc2: InterceptMisc2,     // +0x010
@@ -18,11 +17,11 @@ pub struct ControlArea {
     pub msrpm_base_pa: u64,                  // +0x048
     pub tsc_offset: u64,                     // +0x050
     pub guest_asid: u32,                     // +0x058
-    pub tlb_control: u32,                    // +0x05c
+    pub tlb_control: TlbControl,             // +0x05c
     pub vintr: u64,                          // +0x060
     pub interrupt_shadow: u64,               // +0x068
     pub exit_code: VmExitCode,               // +0x070
-    pub exit_info1: u64,                     // +0x078
+    pub exit_info1: NptExitInfo,             // +0x078
     pub exit_info2: u64,                     // +0x080
     pub exit_int_info: u64,                  // +0x088
     pub np_enable: NpEnable,                 // +0x090
@@ -31,7 +30,7 @@ pub struct ControlArea {
     pub event_inj: u64,                      // +0x0a8
     pub ncr3: u64,                           // +0x0b0
     pub lbr_virtualization_enable: u64,      // +0x0b8
-    pub vmcb_clean: u64,                     // +0x0c0
+    pub vmcb_clean: VmcbClean,               // +0x0c0
     pub nrip: u64,                           // +0x0c8
     pub num_of_bytes_fetched: u8,            // +0x0d0
     pub guest_instruction_bytes: [u8; 15],   // +0x0d1
@@ -43,8 +42,118 @@ pub struct ControlArea {
     pub vmcb_save_state_pointer: u64,        // +0x108
     pub reserved4: [u8; 0x400 - 0x110],      // +0x110
 }
+const_assert_eq!(core::mem::size_of::<ControlArea>(), 0x400);
 
 bitflags! {
+    pub struct ExceptionVector: u32 {
+        /// A #DE exception occurs when the denominator of a DIV instruction or an IDIV instruction is 0. A
+        /// #DE also occurs if the result is too large to be represented in the destination.
+        const DIVISION = 1 << 0;
+
+        /// When the debug-exception mechanism is enabled, a #DB exception can occur under any of the
+        /// following circumstances:
+        /// • Instruction execution.
+        /// • Instruction single stepping.
+        /// • Data read.
+        /// • Data write.
+        /// • I/O read.
+        /// • I/O write.
+        /// • Task switch.
+        /// • Debug-register access, or general detect fault (debug register access when DR7.GD=1).
+        /// • Executing the INT1 instruction (opcode 0F1h).
+        const DEBUG = 1 << 1;
+
+        /// An NMI exception occurs as a result of system logic signaling a non-maskable interrupt to the
+        /// processor.
+        const NON_MASKABLE_INTERRUPT = 1 << 2;
+
+        /// A #BP exception occurs when an INT3 instruction is executed. The INT3 is normally used by debug
+        /// software to set instruction breakpoints by replacing instruction-opcode bytes with the INT3 opcode.
+        const BREAKPOINT = 1 << 3;
+
+        /// An #OF exception occurs as a result of executing an INTO instruction while the overflow bit in
+        /// RFLAGS is set to 1 (RFLAGS.OF=1).
+        const OVERFLOW = 1 << 4;
+
+        /// A #BR exception can occur as a result of executing the BOUND instruction. The BOUND instruction
+        /// compares an array index (first operand) with the lower bounds and upper bounds of an array (second
+        /// operand). If the array index is not within the array boundary, the #BR occurs.
+        const BOUND_RANGE = 1 << 5;
+
+        /// A #UD exception occurs when an attempt is made to execute an invalid or undefined opcode. The
+        /// validity of an opcode often depends on the processor operating mode.
+        const INVALID_OPCODE = 1 << 6;
+
+        // TODO: Add other exception types.
+    }
+
+    /// See `15.15.3 VMCB Clean Field`
+    ///
+    /// Bits 31:12 are reserved for future implementations. For forward compatibility, if the hypervisor has
+    /// not modified the VMCB, the hypervisor may write FFFF_FFFFh to the VMCB Clean Field to indicate
+    /// that it has not changed any VMCB contents other than the fields described below as explicitly
+    /// uncached. **The hypervisor should write 0h to indicate that the VMCB is new or potentially inconsistent
+    /// with the CPU's cached copy**, as occurs when the hypervisor has allocated a new location for an existing
+    /// VMCB from a list of free pages and does not track whether that page had recently been used as a
+    /// VMCB for another guest. If any VMCB fields (excluding explicitly uncached fields) have been
+    /// modified, all clean bits that are undefined (within the scope of the hypervisor) must be cleared to zero.
+    pub struct VmcbClean: u64 {
+        /// Intercepts: all the intercept vectors, TSC offset, Pause Filter Count
+        const I = 1 << 0;
+
+        /// IOMSRPM: IOPM_BASE, MSRPM_BASE
+        const IOPM = 1 << 1;
+
+        /// ASID
+        const ASID = 1 << 2;
+
+        /// V_TPR, V_IRQ, V_INTR_PRIO, V_IGN_TPR, V_INTR_MASKING, V_INTR_VECTOR (Offset 60h–67h)
+        const TPR = 1 << 3;
+
+        /// Nested Paging: NCR3, G_PAT
+        const NP = 1 << 4;
+
+        /// CR0, CR3, CR4, EFER
+        const CR_X = 1 << 5;
+
+        /// DR6, DR7
+        const DR_X = 1 << 6;
+
+        /// GDT/IDT Limit and Base
+        const DT = 1 << 7;
+
+        /// CS/DS/SS/ES Sel/Base/Limit/Attr, CPL
+        const SEG = 1 << 8;
+
+        /// CR2
+        const CR2 = 1 << 9;
+
+        /// DbgCtlMsr, br_from/to, lastint_from/to
+        const LBR = 1 << 10;
+
+        /// AVIC APIC_BAR; AVIC APIC_BACKING_PAGE, AVIC PHYSICAL_TABLE and AVIC LOGICAL_
+        /// TABLE Pointers
+        const AVIC = 1 << 11;
+
+        /// S_CET, SSP, ISST_ADDR
+        const CET = 1 << 12;
+    }
+
+    pub struct TlbControl: u32 {
+        /// 00h—Do nothing.
+        const DO_NOTHING                        = 0;
+
+        /// 01h—Flush entire TLB (all entries, all ASIDs) on VMRUN.
+        /// Should only be used by legacy hypervisors.
+        const FLUSH_ENTIRE_TLB                  = 1;
+
+        /// 03h—Flush this guest’s TLB entries.
+        const FLUSH_GUEST_TLB                   = 3;
+
+        /// 07h—Flush this guest’s non-global TLB entries.
+        const FLUSH_GUEST_NON_GLOBAL_TLB        = 4;
+    }
+
     pub struct NpEnable: u64 {
         const NESTED_PAGING                     = 1 << 0;
         const SECURE_ENCRYPTED_VIRTUALIZATION   = 1 << 1;
@@ -92,7 +201,6 @@ bitflags! {
         const INTERCEPT_FERR_FREEZE = 1 << 30;
         const INTERCEPT_SHUTDOWN = 1 << 31;
     }
-
 
     pub struct InterceptMisc2: u32 {
         const INTERCEPT_VMRUN = 1 << 0;
@@ -294,5 +402,40 @@ bitflags! {
         const AVIC_NOACCEL = 1026;
         const VMEXIT_VMGEXIT = 1027;
         const VMEXIT_INVALID = u64::MAX;
+    }
+
+    /// See "Nested versus Guest Page Faults, Fault Ordering"
+    pub struct NptExitInfo: u64 {
+        /// Bit 0 (P)—cleared to 0 if the nested page was not present, 1 otherwise
+        const PRESENT           = 1 << 0;
+
+        /// Bit 1 (RW)—set to 1 if the nested page table level access was a write. Note that host table walks for
+        /// guest page tables are always treated as data writes.
+        const RW                = 1 << 1;
+
+        /// Bit 2 (US)—set to 1 if the nested page table level access was a user access. Note that nested page
+        /// table accesses performed by the MMU are treated as user accesses unless there are features
+        /// enabled that override this.
+        const US                = 1 << 2;
+
+        /// Bit 3 (RSV)—set to 1 if reserved bits were set in the corresponding nested page table entry
+        const RSV               = 1 << 3;
+
+        /// Bit 4 (ID)—set to 1 if the nested page table level access was a code read. Note that nested table
+        /// walks for guest page tables are always treated as data writes, even if the access itself is a code read
+        const ID                = 1 << 4;
+
+        /// Bit 6 (SS) - set to 1 if the fault was caused by a shadow stack access.
+        const SS                = 1 << 6;
+
+        /// Bit 32—set to 1 if nested page fault occurred while translating the guest’s final physical address
+        const GUEST_PA                    = 1 << 32;
+
+        /// Bit 33—set to 1 if nested page fault occurred while translating the guest page tables
+        const GUEST_PAGE_TABLES           = 1 << 33;
+
+        /// Bit 37—set to 1 if the page was marked as a supervisor shadow stack page in the leaf node of the
+        /// nested page table and the shadow stack check feature is enabled in VMCB offset 90h.
+        const GUEST_PAGE_TABLES_WITH_SS   = 1 << 37;
     }
 }

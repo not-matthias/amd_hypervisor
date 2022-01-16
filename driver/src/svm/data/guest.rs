@@ -17,17 +17,7 @@ pub struct GuestRegisters {
     pub rcx: u64,
     pub rax: u64,
 }
-
-pub struct GuestContext {
-    pub guest_regs: *mut GuestRegisters,
-    pub exit_vm: bool,
-}
-
-impl GuestContext {
-    pub fn new(registers: *mut GuestRegisters, exit_vm: bool) -> GuestContext {
-        GuestContext {
-            guest_regs: registers,
-            exit_vm,
-        }
-    }
-}
+const_assert_eq!(
+    core::mem::size_of::<GuestRegisters>(),
+    0x80 /* 16 * 0x8 */
+);

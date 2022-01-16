@@ -94,9 +94,9 @@ guest_loop:
     //       allocate it.
     //
     mov rdx, rsp                    // rdx = guest_registers
-    mov rcx, [rsp + 8 * 18 + 0x190] // rcx = processor_data.host_stack_layout.guest_vmcb_pa
+    mov rcx, [rsp + 8 * 18 + 0x190] // rcx = processor_data
 
-    // Allocate stack for homing(???) space (0x20) and for XMM registers (0x60). Save
+    // Allocate stack for homing space (0x20) and for XMM registers (0x60). Save
     // those registers since they also have to be saved on #VMEXIT.
     //
     sub rsp, 0x20 + 0x60

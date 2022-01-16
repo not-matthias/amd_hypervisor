@@ -1,19 +1,27 @@
 extern crate alloc;
 
-use crate::nt::include::Context;
-use crate::nt::memory::AllocatedMemory;
-use crate::nt::processor::{processor_count, ProcessorExecutor};
-use crate::svm::data::msr_bitmap::EFER_SVME;
-use crate::svm::data::processor::ProcessorData;
-use crate::svm::data::shared_data::SharedData;
-use crate::svm::vmexit::CPUID_DEVIRTUALIZE;
-use crate::svm::vmlaunch::launch_vm;
-use crate::{dbg_break, support, KeBugCheck, MANUALLY_INITIATED_CRASH};
-
-use crate::support::is_virtualized;
+use crate::{
+    dbg_break,
+    hook::Hook,
+    nt::{
+        include::Context,
+        memory::AllocatedMemory,
+        processor::{processor_count, ProcessorExecutor},
+    },
+    support,
+    support::is_virtualized,
+    svm::{
+        data::{msr_bitmap::EFER_SVME, processor::ProcessorData, shared_data::SharedData},
+        vmexit::CPUID_DEVIRTUALIZE,
+        vmlaunch::launch_vm,
+    },
+    KeBugCheck, MANUALLY_INITIATED_CRASH,
+};
 use alloc::vec::Vec;
-use x86::cpuid::cpuid;
-use x86::msr::{rdmsr, wrmsr, IA32_EFER};
+use x86::{
+    cpuid::cpuid,
+    msr::{rdmsr, wrmsr, IA32_EFER},
+};
 
 pub mod data;
 pub mod events;
@@ -23,25 +31,26 @@ pub mod vmexit;
 pub mod vmlaunch;
 
 pub struct Processors {
-    shard_data: SharedData,
+    shared_data: AllocatedMemory<SharedData>,
     processors: Vec<Processor>,
 }
 
 impl Processors {
     /// Creates new instance for all the processors on the system.
-    pub fn new() -> Option<Self> {
+    pub fn new(hook: Vec<Hook>) -> Option<Self> {
         if !support::is_svm_supported() {
             log::error!("SVM is not supported");
             return None;
         }
 
-        let processors = (0..processor_count())
-            .filter_map(Processor::new)
-            .collect::<Vec<_>>();
+        let mut processors = Vec::new();
+        for i in 0..processor_count() {
+            processors.push(Processor::new(i)?);
+        }
         log::info!("Found {} processors", processors.len());
 
         Some(Self {
-            shard_data: SharedData::new()?,
+            shared_data: SharedData::new(hook)?,
             processors,
         })
     }
@@ -51,8 +60,8 @@ impl Processors {
 
         let mut status = true;
         for processor in self.processors.iter_mut() {
-            // NOTE: We have to execute this in the loop and can't do it in the `virtualize` function
-            // for some reason. If we do, an access violation occurs.
+            // NOTE: We have to execute this in the loop and can't do it in the `virtualize`
+            // function for some reason. If we do, an access violation occurs.
             //
             let Some(executor) = ProcessorExecutor::switch_to_processor(processor.id()) else {
                 log::error!("Failed to switch to processor");
@@ -60,7 +69,7 @@ impl Processors {
                 break;
             };
 
-            if !processor.virtualize(&mut self.shard_data) {
+            if !processor.virtualize(self.shared_data.as_mut()) {
                 log::error!("Failed to virtualize processor {}", processor.id());
 
                 status = false;
@@ -123,13 +132,15 @@ impl Processor {
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
 
-        // IMPORTANT: We have to capture the context right here, so that `launch_vm` continues the
-        // execution of the current process at this point of time. If we don't do this,
-        // weird things will happen since we will execute the guest at another point.
+        // IMPORTANT: We have to capture the context right here, so that `launch_vm`
+        // continues the execution of the current process at this point of time.
+        // If we don't do this, weird things will happen since we will execute
+        // the guest at another point.
         //
-        // This also makes sense why `vmsave` was crashing inside `prepare_for_virtualization`. It
-        // obviously entered the guest state and tried to execute from there on. And because of that,
-        // everything that happened afterwards is just undefined behaviour.
+        // This also makes sense why `vmsave` was crashing inside
+        // `prepare_for_virtualization`. It obviously entered the guest state
+        // and tried to execute from there on. And because of that, everything
+        // that happened afterwards is just undefined behaviour.
         //
         // Literally wasted like a whole day just because of this 1 line.
         //
@@ -155,8 +166,8 @@ impl Processor {
             //
             log::info!("Launching vm");
 
-            let host_rsp = unsafe { &(*self.processor_data.ptr()).host_stack_layout.guest_vmcb_pa };
-            let host_rsp = host_rsp as *const u64 as u64;
+            let host_rsp =
+                &mut self.processor_data.as_mut().host_stack_layout.guest_vmcb_pa as *mut u64;
             unsafe { launch_vm(host_rsp) };
 
             // We should never continue the guest execution here.
