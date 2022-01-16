@@ -1,19 +1,18 @@
 use crate::debug::dbg_break;
+
 use crate::nt::addresses::{physical_address, PhysicalAddress};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
+
 use crate::nt::ptr::Pointer;
-use crate::nt::stack::{find_return_addresses, return_address_by_rip, top_return_address};
+
 use crate::svm::data::guest::GuestRegisters;
 use crate::svm::data::msr_bitmap::EFER_SVME;
 use crate::svm::data::processor::ProcessorData;
 use crate::svm::events::EventInjection;
 use crate::svm::paging::AccessType;
-use crate::svm::vmcb::control_area::{NptExitInfo, VmExitCode};
+use crate::svm::vmcb::control_area::{NptExitInfo, TlbControl, VmExitCode, VmcbClean};
 use crate::HookType;
 use core::arch::asm;
-
-use crate::hook::HookedNpt;
-use crate::nt::memory::AllocatedMemory;
 use x86::cpuid::cpuid;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -201,7 +200,10 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
             .as_u64();
 
         hooked_npt
-            .npt
+            .rw_npt
+            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute); // TODO: Change this
+        hooked_npt
+            .rwx_npt
             .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
 
         return ExitType::DoNothing;
@@ -211,143 +213,40 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
     // - #1 - Yes: Guest tried to execute a function inside the hooked page.
     // - #2 - No: Guest tried to execute code outside the hooked page (our hook has been exited).
     //
-    // For both these situations, we have to do something different:
-    // - #1 - Change permission of hook page to RWX and of other pages to RW.
-    // - #2 - Change permission of hook page to RW and of other pages to RWX.
-    //
-
-    // We need to do 2 things:
-    // - Change the permissions of the hooked page to RWX
-    // - Detect when the hooked page goes out of scope to restore the permissions.
-    //
-    if let Some(hooked_page_pa) = hooked_npt
+    if let Some(hook_pa) = hooked_npt
         .find_hook(faulting_pa)
         .map(|hook| hook.page_pa.as_u64())
     {
-        // Find the correct ret address
-        //
-        // **Why do we need to do this?** Because there's certain situations where we don't use `call` to
-        // jump to the code inside the page. If it's (un)-conditional jumps, then we don't have any
-        // options to detect where the caller came from. The return address will also not always be
-        // at the top of the stack, because the caller can push their own data.
-        //
-        // **Why can't we use rbp?** Because it's often used for other purposes. This is a very common optimization.
-        //
-        // TODO: I'm not quite sure why we don't vmexit directly after the `call` instruction
-        //
-        log::info!("RIP: {:x}", data.guest_vmcb.save_area.rip);
-        log::info!("RSP: {:x}", data.guest_vmcb.save_area.rsp);
-
-        log::info!("==> Showing the hooks");
-        hooked_npt.npt.change_page_permission(
+        hooked_npt.rw_npt.change_page_permission(
             faulting_pa,
-            hooked_page_pa,
+            hook_pa,
             AccessType::ReadWriteExecute,
         );
 
-        // Set return_address to RW
-        //
-        let protect_ret_addr = |hooked_npt: &mut AllocatedMemory<HookedNpt>, return_address| {
-            let return_address = PhysicalAddress::from_va(return_address)
-                .align_down_to_base_page()
-                .as_u64();
-
-            let _ = hooked_npt.npt.split_2mb_to_4kb(return_address);
-            hooked_npt.npt.change_page_permission(
-                return_address,
-                return_address,
-                AccessType::ReadWrite,
-            );
-        };
-
-        // 1. Use RtlVirtualUnwind to find the return address
-        let Some(return_address) = return_address_by_rip(data.guest_vmcb.save_area.rip) else {
-            dbg_break!();
-            return ExitType::DoNothing;
-        };
-        log::info!("Return address: {:x?}", return_address);
-        protect_ret_addr(hooked_npt, return_address);
-
-        // 2. Use the first stack element as return address
-        if let Some(return_address) = top_return_address(data.guest_vmcb.save_area.rsp) {
-            log::info!("Top stack return address: {:x?}", return_address);
-            protect_ret_addr(hooked_npt, return_address);
-        }
-
-        if let Some(return_addresses) = find_return_addresses(data.guest_vmcb.save_area.rsp) {
-            log::info!("Manual return address: {:x?}", return_addresses);
-
-            for return_address in return_addresses {
-                protect_ret_addr(hooked_npt, return_address);
-            }
-        }
-
-        // // Set the tramplines to RW
-        // //
-        // let trampolines = hooked_npt
-        //     .hooks
-        //     .iter()
-        //     .map(|h| &h.hook_type)
-        //     .filter_map(|t| {
-        //         if let HookType::Function { inline_hook } = t {
-        //             Some(inline_hook.trampoline_address() as u64)
-        //         } else {
-        //             None
-        //         }
-        //     })
-        //     .map(|addr| PhysicalAddress::from_va(addr))
-        //     .collect::<alloc::vec::Vec<_>>(); // TODO: Can we get rid of the collect?
-        // for trampoline in trampolines {
-        //     let base_page = trampoline.align_down_to_base_page().as_u64();
-        //
-        //     let _ = hooked_npt.npt.split_2mb_to_4kb(base_page);
-        //     hooked_npt
-        //         .npt
-        //         .change_page_permission(base_page, base_page, AccessType::ReadWrite);
-        // }
+        data.guest_vmcb.control_area.ncr3 = hooked_npt.rw_pml4.as_u64();
     } else {
-        log::info!("==> Hiding the hooks");
-
-        // We hit the rw return address. Time to hide all our hooks.
+        // Just to be safe: Change the permission of the faulting pa to rwx again. I'm not sure why
+        // we need this, but if we don't do it, we'll get stuck at 'Launching vm'.
         //
-        hooked_npt.hide_hooks();
-
-        // Also make the current address (the previous return address) executable again.
-        //
-        hooked_npt.npt.change_page_permission(
+        hooked_npt.rwx_npt.change_page_permission(
             faulting_pa,
             faulting_pa,
             AccessType::ReadWriteExecute,
         );
+
+        data.guest_vmcb.control_area.ncr3 = hooked_npt.rwx_pml4.as_u64();
     }
 
-    // Apply or revert hooks
+    // We changed the `cr3` of the guest, so we have to flush the TLB.
     //
-    // let hide_hook = || {
-    //     map_all(rwx);
-    //     map_4k(guest_pa, guest_pa, rw); // revert the hook
-    // };
-    // let show_hook = || {
-    //     map_all(rw);
-    //     map_4k(guest_pa, hook.pa, rwx);  // apply hook
-    // };
-
-    // if there's a hook for this address
-    //
-    // if let Some(hook) = find_hook(rip?) {
-    //     if let Some(hook) = active_hook() {
-    //         // Hooked page jumped to hooked page
-    //         // TODO: This could be optimized, but it shouldn't be used often.
-    //         hide_hook();
-    //         show_hook();
-    //     } else {
-    //         // Legit page jumped to hooked page
-    //         show_hook();
-    //     }
-    // } else {
-    //     // Hooked page jumped outside. Hide hook.
-    //     hide_hook();
-    // }
+    data.guest_vmcb
+        .control_area
+        .tlb_control
+        .insert(TlbControl::FLUSH_GUEST_TLB);
+    data.guest_vmcb
+        .control_area
+        .vmcb_clean
+        .remove(VmcbClean::NP);
 
     ExitType::DoNothing
 }

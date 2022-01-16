@@ -1,14 +1,15 @@
 extern crate alloc;
 
-use crate::hook::{Hook, HookedNpt};
+use crate::hook::npt::DuplicateNptHook;
 use crate::nt::memory::AllocatedMemory;
 use crate::svm::data::msr_bitmap::MsrBitmap;
+use crate::Hook;
 use alloc::vec::Vec;
 
 #[repr(C)]
 pub struct SharedData {
     pub msr_permission_map: AllocatedMemory<u32>,
-    pub hooked_npt: AllocatedMemory<HookedNpt>,
+    pub hooked_npt: AllocatedMemory<DuplicateNptHook>,
 }
 
 impl SharedData {
@@ -17,7 +18,7 @@ impl SharedData {
 
         let mut data = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
         data.msr_permission_map = MsrBitmap::new()?;
-        data.hooked_npt = HookedNpt::new(hooks)?;
+        data.hooked_npt = DuplicateNptHook::new(hooks)?;
 
         Some(data)
     }

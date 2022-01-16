@@ -16,11 +16,11 @@
 extern crate alloc;
 
 use crate::debug::dbg_break;
-use crate::hook::{handlers, Hook, HookType};
+use crate::hook::{testing, Hook, HookType};
 use crate::nt::include::{KeBugCheck, MANUALLY_INITIATED_CRASH};
 use crate::nt::inline_hook::InlineHook;
 use crate::nt::physmem_descriptor::PhysicalMemoryDescriptor;
-use crate::nt::ptr::Pointer;
+
 use crate::svm::Processors;
 use alloc::vec;
 use alloc::vec::Vec;
@@ -45,18 +45,18 @@ static LOGGER: KernelLogger = KernelLogger;
 static mut PROCESSORS: Option<Processors> = None;
 
 fn init_hooks() -> Option<Vec<Hook>> {
-    // ZwQuerySystemInformation
-    //
-    let zwqsi_hook = Hook::hook_function(
-        "ZwQuerySystemInformation",
-        handlers::zw_query_system_information as *const (),
-    )?;
-    unsafe {
-        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => None,
-        };
-    }
+    // // ZwQuerySystemInformation
+    // //
+    // let zwqsi_hook = Hook::hook_function(
+    //     "ZwQuerySystemInformation",
+    //     handlers::zw_query_system_information as *const (),
+    // )?;
+    // unsafe {
+    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
+    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+    //         HookType::Page => None,
+    //     };
+    // }
 
     // // ExAllocatePoolWithTag
     // //
@@ -71,22 +71,27 @@ fn init_hooks() -> Option<Vec<Hook>> {
     //     };
     // }
 
-    // MmIsAddressValid
-    //
-    let mmiav_hook = Hook::hook_function(
-        "MmIsAddressValid",
-        handlers::mm_is_address_valid as *const (),
+    // // MmIsAddressValid
+    // //
+    // let mmiav_hook = Hook::hook_function(
+    //     "MmIsAddressValid",
+    //     handlers::mm_is_address_valid as *const (),
+    // )?;
+    // unsafe {
+    //     handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
+    //         HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+    //         HookType::Page => unreachable!(),
+    //     };
+    // }
+
+    let hook = Hook::hook_function_ptr(
+        unsafe { testing::SHELLCODE_PA.as_ref().unwrap().va() as u64 },
+        testing::hook_handler as *const (),
     )?;
-    unsafe {
-        handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => unreachable!(),
-        };
-    }
 
     // FIXME: Currently only 1 hook is supported
 
-    Some(vec![zwqsi_hook])
+    Some(vec![hook])
 }
 
 fn virtualize_system() -> Option<()> {
@@ -135,10 +140,10 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
     // Initialize the hook testing
     //
 
-    // testing::init();
-    // testing::print_shellcode();
-    // testing::call_shellcode();
-    // testing::print_shellcode();
+    testing::init();
+    testing::print_shellcode();
+    testing::call_shellcode();
+    testing::print_shellcode();
 
     // Print physical memory pages
     //
@@ -188,11 +193,11 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
             // Call the hook again after initialization
             //
-            // testing::print_shellcode();
-            // testing::call_shellcode();
-            // testing::print_shellcode();
+            testing::print_shellcode();
+            testing::call_shellcode();
+            testing::print_shellcode();
 
-            handlers::test_hooks();
+            // handlers::test_hooks();
 
             status
         }

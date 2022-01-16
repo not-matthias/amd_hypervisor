@@ -7,9 +7,15 @@ use crate::PhysicalMemoryDescriptor;
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
-    PML4Entry, PML4Flags, PTEntry, PTFlags, VAddr, BASE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT,
-    PML4, PT,
+    PML4Entry, PML4Flags, PTEntry, VAddr, BASE_PAGE_SIZE, PAGE_SIZE_ENTRIES, PD, PDPT, PML4, PT,
 };
+
+// The NX bit can only be set when the no-execute page-protection feature is enabled by setting
+// EFER.NXE to 1 (see “Extended Feature Enable Register (EFER)” on page 56). If EFER.NXE=0, the
+// NX bit is treated as reserved. In this case, a page-fault exception (#PF) occurs if the NX bit is not
+// cleared to 0.
+//
+// TODO: Check for NX bit
 
 /// TODO: Detection Vector: Lookup page tables in physical memory
 #[repr(C, align(4096))]
@@ -146,14 +152,14 @@ impl NestedPageTable {
 
     /// Builds the nested page table to cover for the entire physical memory address space.
     #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
-    pub fn system() -> Option<AllocatedMemory<Self>> {
+    pub fn system(access_type: AccessType) -> Option<AllocatedMemory<Self>> {
         let desc = PhysicalMemoryDescriptor::new();
         let mut npt =
             AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
 
         // FIXME: For some reason this still doesn't work.
         for pa in (0..desc.total_size()).step_by(_2MB) {
-            npt.map_2mb(pa as u64, pa as u64, AccessType::ReadWriteExecute);
+            npt.map_2mb(pa as u64, pa as u64, access_type);
         }
 
         // TODO: Do we need APIC base?
@@ -164,7 +170,7 @@ impl NestedPageTable {
         // let apic_base = apic_base & 0xFFFFF000; // TODO: Trust copilot or do it myself?
         // let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
         //
-        // npt.map_2mb(apic_base, apic_base, AccessType::ReadWriteExecute);
+        // npt.map_2mb(apic_base, apic_base, access_type);
 
         Some(npt)
     }
@@ -179,7 +185,7 @@ impl NestedPageTable {
     ///
     /// See:
     /// - https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L245
-    pub fn split_2mb_to_4kb(&mut self, guest_pa: u64) {
+    pub fn split_2mb_to_4kb(&mut self, guest_pa: u64, access_type: AccessType) {
         log::trace!("Splitting 2mb page into 4kb pages: {:x}", guest_pa);
 
         let guest_pa = VAddr::from(guest_pa);
@@ -204,11 +210,11 @@ impl NestedPageTable {
         //
         for i in 0..PAGE_SIZE_ENTRIES {
             let address = guest_pa.as_usize() + i * BASE_PAGE_SIZE;
-            self.map_4kb(address as _, address as _, AccessType::ReadWriteExecute);
+            self.map_4kb(address as _, address as _, access_type);
         }
     }
 
-    pub fn join_4kb_to_2mb(&mut self, guest_pa: u64) -> Option<()> {
+    pub fn join_4kb_to_2mb(&mut self, guest_pa: u64, access_type: AccessType) -> Option<()> {
         log::trace!("Joining 4kb pages into 2mb page: {:x}", guest_pa);
 
         let guest_pa = VAddr::from(guest_pa);
@@ -232,11 +238,7 @@ impl NestedPageTable {
         // Map the unmapped physical memory again to a 2MB large page.
         //
         log::trace!("Mapping 2mb page: {:x}", guest_pa);
-        self.map_2mb(
-            guest_pa.as_u64(),
-            guest_pa.as_u64(),
-            AccessType::ReadWriteExecute,
-        );
+        self.map_2mb(guest_pa.as_u64(), guest_pa.as_u64(), access_type);
 
         Some(())
     }
@@ -343,40 +345,58 @@ impl NestedPageTable {
     //
 
     /// Changes the permission of a single page (can be 2mb or 4kb).
-    pub fn change_page_permission(&mut self, guest_pa: u64, host_pa: u64, permission: AccessType) {
+    pub fn change_page_permission(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         log::trace!(
             "Changing permission of guest page {:#x} to {:?}",
             guest_pa,
-            permission
+            access_type
         );
 
         let guest_pa = VAddr::from(guest_pa);
         let host_pa = PAddr::from(host_pa);
 
+        let pml4_index = pml4_index(guest_pa);
         let pdpt_index = pdpt_index(guest_pa);
         let pd_index = pd_index(guest_pa);
         let pt_index = pt_index(guest_pa);
+
+        self.pml4[pml4_index] =
+            PML4Entry::new(self.pml4[pml4_index].address(), access_type.pml4_flags());
+
+        self.pdp_entries[pdpt_index] = PDPTEntry::new(
+            self.pdp_entries[pdpt_index].address(),
+            access_type.pdpt_flags(),
+        );
 
         let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
         if pd_entry.is_page() {
             log::trace!("Changing the permissions of a 2mb page");
 
-            let flags = permission.modify_2mb(pd_entry.flags());
-            let entry = PDEntry::new(host_pa, flags);
-
-            *pd_entry = entry;
+            *pd_entry = PDEntry::new(host_pa, access_type.modify_2mb(pd_entry.flags()));
         } else {
             log::trace!("Changing the permissions of a 4kb page");
 
-            let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
-            #[cfg(not(feature = "no-assertions"))]
-            assert!(pt_entry.is_present());
+            *pd_entry = PDEntry::new(pd_entry.address(), access_type.pd_flags());
 
-            let flags = permission.modify_4kb(pt_entry.flags());
+            let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
+            let flags = access_type.modify_4kb(pt_entry.flags());
             let entry = PTEntry::new(host_pa, flags);
 
             *pt_entry = entry;
         }
+    }
+
+    /// Should only be used for debugging
+    pub fn print_page_permission(&mut self, guest_pa: u64) {
+        let guest_pa = VAddr::from(guest_pa);
+
+        let pdpt_index = pdpt_index(guest_pa);
+        let pd_index = pd_index(guest_pa);
+        let pt_index = pt_index(guest_pa);
+
+        let pd_entry = &self.pd_entries[pdpt_index][pd_index];
+        let pt_entry = &self.pt_entries[pdpt_index][pd_index][pt_index];
+        log::info!("PDEntry: {:x?}, PTEntry: {:x?}", pd_entry, pt_entry);
     }
 
     pub fn last_pdp_index(&self) -> usize {

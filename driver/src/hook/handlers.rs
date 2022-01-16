@@ -91,7 +91,7 @@ pub fn test_hooks() {
 
     // Test MmIsAddressValid
     //
-    // log::info!("Is address valid: {:?}", unsafe {
-    //     MmIsAddressValid(0 as _)
-    // });
+    log::info!("Is address valid: {:?}", unsafe {
+        nt::include::MmIsAddressValid(0 as _)
+    });
 }

@@ -165,10 +165,6 @@ impl Processor {
             unsafe { KeBugCheck(MANUALLY_INITIATED_CRASH) };
         }
 
-        // We virtualized the processor so we can enable the hooks.
-        //
-        shared_data.hooked_npt.enable();
-
         true
     }
 

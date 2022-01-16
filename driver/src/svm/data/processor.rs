@@ -64,8 +64,9 @@ impl ProcessorData {
         let guest_vmcb_pa = physical_address(&self.guest_vmcb as *const _ as _);
         let host_vmcb_pa = physical_address(&self.host_vmcb as *const _ as _);
         let host_state_area_pa = physical_address(self.host_state_area.as_ptr() as *const _);
-        let pml4_pa =
-            physical_address(shared_data.hooked_npt.as_mut().npt.pml4.as_ptr() as *const _ as _);
+        let pml4_pa = physical_address(
+            shared_data.hooked_npt.as_mut().rwx_npt.pml4.as_ptr() as *const _ as _
+        );
         let msr_pm_pa = physical_address(shared_data.msr_permission_map.as_ptr() as *const _);
 
         log::trace!("Physical addresses:");
