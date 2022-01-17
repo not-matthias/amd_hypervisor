@@ -36,7 +36,7 @@ static_assertions = "1.1.0"
 
 [profile.release]
 lto = "fat"
-#debug = true
-#panic = "abort"
+debug = true
+panic = "abort"
 overflow-checks = false
 debug-assertions = false
