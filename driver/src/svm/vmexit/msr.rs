@@ -1,7 +1,14 @@
-use crate::svm::{
-    data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor_data::ProcessorData},
-    events::EventInjection,
-    vmexit::ExitType,
+use crate::{
+    dbg_break,
+    svm::{
+        data::{
+            guest::GuestRegisters,
+            msr_bitmap::{EFER_SVME, SVM_MSR_VM_HSAVE_PA},
+            processor_data::ProcessorData,
+        },
+        events::EventInjection,
+        vmexit::ExitType,
+    },
 };
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
@@ -56,63 +63,77 @@ pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> 
     // TODO: Is this needed? Since we only get msr from inside the msr permission
     // bitmap?
     if !is_valid_msr(msr) {
+        dbg_break!();
         EventInjection::gp().inject(data);
         return ExitType::IncrementRIP;
     }
 
     // Prevent IA32_EFER from being modified
     //
-    if msr == IA32_EFER {
-        #[cfg(not(feature = "no-assertions"))]
-        assert!(write_access);
+    match msr {
+        IA32_EFER => {
+            dbg_break!();
+            if write_access {
+                let low_part = guest_regs.rax as u32;
+                let high_part = guest_regs.rdx as u32;
+                let value = (high_part as u64) << 32 | low_part as u64;
 
-        let low_part = guest_regs.rax as u32;
-        let high_part = guest_regs.rdx as u32;
-        let value = (high_part as u64) << 32 | low_part as u64;
+                // The guest is trying to enable SVM.
+                //
+                // Inject a #GP exception if the guest attempts to clear the flag. The
+                // protection of this bit is required because clearing it would result
+                // in undefined behavior.
+                //
+                if value & EFER_SVME != 0 {
+                    EventInjection::gp().inject(data);
+                }
 
-        // TODO: Hide: EFER_SVME
+                // Otherwise, update the msr as requested.
+                //
+                // Note: The value should be checked beforehand to not allow any illegal values
+                // and inject a #GP as needed. If that is not done, the hypervisor attempts to
+                // resume the guest with an invalid EFER value and immediately receives
+                // #VMEXIT due to VMEXIT_INVALID. This would in this case, result in a
+                // bug check.
+                //
+                // See `Extended Feature Enable Register (EFER)` for what values are allowed.
+                // TODO: Implement this check
+                //
+                data.guest_vmcb.save_area.efer = value;
+            } else {
+                // The EFER msr, without the svme flag.
+                //
+                let value = data.guest_vmcb.save_area.efer & !EFER_SVME;
 
-        // The guest is trying to enable SVM.
-        //
-        // Inject a #GP exception if the guest attempts to clear the flag. The
-        // protection of this bit is required because clearing it would result
-        // in undefined behavior.
-        //
-        if value & EFER_SVME != 0 {
-            EventInjection::gp().inject(data);
+                guest_regs.rax = (value as u32) as u64;
+                guest_regs.rdx = (value >> 32) as u64;
+            }
         }
+        SVM_MSR_VM_HSAVE_PA => {
+            dbg_break!();
+            guest_regs.rax = 0;
+            guest_regs.rdx = 0;
+        }
+        _ => {
+            // Execute rdmsr or wrmsr as requested by the guest.
+            //
+            // Important: This can bug check if the guest tries to access an MSR that is not
+            // supported by            the host. See SimpleSvm for more information
+            // on how to handle this correctly.
+            //
+            if write_access {
+                let low_part = guest_regs.rax as u32;
+                let high_part = guest_regs.rdx as u32;
 
-        // Otherwise, update the msr as requested.
-        //
-        // Note: The value should be checked beforehand to not allow any illegal values
-        // and inject a #GP as needed. If that is not done, the hypervisor attempts to
-        // resume the guest with an invalid EFER value and immediately receives
-        // #VMEXIT due to VMEXIT_INVALID. This would in this case, result in a
-        // bug check.
-        //
-        // See `Extended Feature Enable Register (EFER)` for what values are allowed.
-        // TODO: Implement this check
-        //
-        data.guest_vmcb.save_area.efer = value;
-    } else {
-        // Execute rdmsr or wrmsr as requested by the guest.
-        //
-        // Important: This can bug check if the guest tries to access an MSR that is not
-        // supported by            the host. See SimpleSvm for more information
-        // on how to handle this correctly.
-        //
-        if write_access {
-            let low_part = guest_regs.rax as u32;
-            let high_part = guest_regs.rdx as u32;
+                let value = (high_part as u64) << 32 | low_part as u64;
 
-            let value = (high_part as u64) << 32 | low_part as u64;
+                unsafe { wrmsr(msr, value) };
+            } else {
+                let value = unsafe { rdmsr(msr) };
 
-            unsafe { wrmsr(msr, value) };
-        } else {
-            let value = unsafe { rdmsr(msr) };
-
-            guest_regs.rax = (value as u32) as u64;
-            guest_regs.rdx = (value >> 32) as u64;
+                guest_regs.rax = (value as u32) as u64;
+                guest_regs.rdx = (value >> 32) as u64;
+            }
         }
     }
 

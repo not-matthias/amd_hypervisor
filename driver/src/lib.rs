@@ -46,6 +46,7 @@ pub mod lang;
 pub mod support;
 pub mod svm;
 pub mod utils;
+pub mod vm_test;
 
 #[global_allocator]
 static GLOBAL: utils::alloc::KernelAlloc = utils::alloc::KernelAlloc;
@@ -140,6 +141,10 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     dbg_break!();
 
+    vm_test::check_all();
+    // unsafe { (*driver).DriverUnload = Some(driver_unload) };
+    // return STATUS_SUCCESS;
+
     // Initialize the hook testing
     //
 
@@ -201,6 +206,8 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
             testing::print_shellcode();
 
             handlers::test_hooks();
+
+            vm_test::check_all();
 
             status
         }

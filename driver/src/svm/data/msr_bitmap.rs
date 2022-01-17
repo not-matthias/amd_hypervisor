@@ -71,5 +71,7 @@ impl MsrBitmap {
         // intercepted.
         //
         unsafe { RtlSetBits(bitmap_header_ptr as _, (offset + 1) as u32, 1) };
+
+        // TODO: Exit on PSAVE msr
     }
 }

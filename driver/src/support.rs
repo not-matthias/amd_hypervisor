@@ -1,7 +1,8 @@
 //! Checks whether the current system is able to run the hypervisor.
 
+use crate::svm::vmexit::cpuid::CPUID_IS_INSTALLED;
 use x86::{
-    cpuid::{CpuId, Hypervisor},
+    cpuid::{cpuid, CpuId, Hypervisor},
     msr::rdmsr,
 };
 
@@ -88,15 +89,9 @@ pub fn is_svm_supported() -> bool {
 /// This is done by comparing the value of cpuid leaf 0x40000000. The cpuid
 /// vmexit has to return the correct value to be able to use this.
 pub fn is_virtualized() -> bool {
-    CpuId::new()
-        .get_hypervisor_info()
-        .map(|hv_info| match hv_info.identify() {
-            Hypervisor::Unknown(ebx, ecx, edx) => {
-                log::info!("Found unknown hypervisor: {:x} {:x} {:x}", ebx, ecx, edx);
+    let result = cpuid!(CPUID_IS_INSTALLED);
 
-                ebx == 0x42 && ecx == 0x42 && edx == 0x42
-            }
-            _ => false,
-        })
-        .unwrap_or_default()
+    log::info!("Checking if processor is virtualized: {:x?}", result);
+
+    result.eax == 0x42 && result.ebx == 0x42 && result.ecx == 0x42 && result.edx == 0x42
 }
