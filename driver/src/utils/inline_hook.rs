@@ -130,18 +130,19 @@ impl FunctionHook {
         }
         unsafe { MmProbeAndLockPages(mdl, KernelMode, IoReadAccess) };
 
-        //
-        //
-        let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
-        hook.trampoline = trampoline;
-        hook.hook_type = hook_type;
-        hook.enabled = false;
-        hook.hook_address = hook_address;
-        hook.original_address = original_address;
-        hook.mdl = mdl;
-        hook.handler = handler as u64;
+        Some({
+            let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
 
-        Some(hook)
+            hook.trampoline = trampoline;
+            hook.hook_type = hook_type;
+            hook.enabled = false;
+            hook.hook_address = hook_address;
+            hook.original_address = original_address;
+            hook.mdl = mdl;
+            hook.handler = handler as u64;
+
+            hook
+        })
     }
 
     pub fn enable(&self) {

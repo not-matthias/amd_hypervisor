@@ -6,7 +6,6 @@ use crate::utils::{
     memory::AllocatedMemory,
     nt::{irql::assert_paged_code, MmGetSystemRoutineAddress, RtlCopyMemory},
 };
-
 use windy::{UnicodeString, WStr};
 use x86::bits64::paging::{PAddr, VAddr, BASE_PAGE_SIZE};
 use x86_64::instructions::interrupts::without_interrupts;

@@ -14,7 +14,6 @@ use winapi::{
 use x86::bits64::paging::{VAddr, BASE_PAGE_SIZE};
 
 #[derive(Debug)]
-#[repr(C)]
 pub enum AllocType {
     Normal,
     Contiguous,
@@ -26,7 +25,6 @@ pub enum AllocType {
 /// `DerefMut` have been implemented to abstract the memory and actual code
 /// behind it away. Because of this and generics, we can have any abstract data
 /// allocated.
-#[repr(C)]
 pub struct AllocatedMemory<T>(NonNull<T>, AllocType);
 
 impl<T> AllocatedMemory<T> {
