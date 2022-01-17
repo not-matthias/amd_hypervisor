@@ -6,7 +6,8 @@ use crate::{
     support,
     support::is_virtualized,
     svm::{
-        data::{msr_bitmap::EFER_SVME, processor_data::ProcessorData, shared_data::SharedData},
+        data::{processor_data::ProcessorData, shared_data::SharedData},
+        msr::EFER_SVME,
         vmexit::cpuid::CPUID_DEVIRTUALIZE,
         vmlaunch::launch_vm,
     },

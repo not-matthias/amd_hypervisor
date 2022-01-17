@@ -1,6 +1,7 @@
 use crate::{
     svm::{
-        data::{msr_bitmap::SVM_MSR_VM_HSAVE_PA, shared_data::SharedData},
+        data::shared_data::SharedData,
+        msr::SVM_MSR_VM_HSAVE_PA,
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
             Vmcb,
@@ -76,7 +77,7 @@ impl ProcessorData {
         let pml4_pa = physical_address(
             shared_data.hooked_npt.as_mut().rwx_npt.pml4.as_ptr() as *const _ as _
         );
-        let msr_pm_pa = physical_address(shared_data.msr_permission_map.as_ptr() as *const _);
+        let msr_pm_pa = physical_address(shared_data.msr_bitmap.as_ptr() as *const _);
 
         log::trace!("Physical addresses:");
         log::trace!("guest_vmcb_pa: {:x}", guest_vmcb_pa);

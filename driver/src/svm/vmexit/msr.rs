@@ -1,16 +1,16 @@
 use crate::{
     dbg_break,
     svm::{
-        data::{
-            guest::GuestRegisters,
-            msr_bitmap::{EFER_SVME, SVM_MSR_VM_HSAVE_PA},
-            processor_data::ProcessorData,
-        },
+        data::{guest::GuestRegisters, processor_data::ProcessorData},
         events::EventInjection,
-        vmexit::ExitType,
+        msr::{EFER_SVME, SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
+        vmexit::{rdtsc::RDTSC_MODIFIER, ExitType},
     },
 };
-use x86::msr::{rdmsr, wrmsr, IA32_EFER};
+use x86::{
+    msr::{rdmsr, wrmsr, IA32_EFER},
+    time::rdtsc,
+};
 
 /// Checks whether the specified MSR is in the [Open-Source Register Reference for AMD CPUs](https://developer.amd.com/wp-content/resources/56255_3_03.PDF). See Page 260, `Memory Map - MSR`.
 ///
@@ -54,88 +54,100 @@ fn is_valid_msr(msr: u32) -> bool {
         || (0xC001_1002..=0xC001_103C).contains(&msr)
 }
 
-pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
+fn handle_efer(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) {
+    let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
+
+    if write_access {
+        let low_part = guest_regs.rax as u32;
+        let high_part = guest_regs.rdx as u32;
+        let value = (high_part as u64) << 32 | low_part as u64;
+
+        // The guest is trying to enable SVM.
+        //
+        // Inject a #GP exception if the guest attempts to clear the flag. The
+        // protection of this bit is required because clearing it would result
+        // in undefined behavior.
+        //
+        if value & EFER_SVME != 0 {
+            EventInjection::gp().inject(data);
+        }
+
+        // Otherwise, update the msr as requested.
+        //
+        // Note: The value should be checked beforehand to not allow any illegal values
+        // and inject a #GP as needed. If that is not done, the hypervisor attempts to
+        // resume the guest with an invalid EFER value and immediately receives
+        // #VMEXIT due to VMEXIT_INVALID. This would in this case, result in a
+        // bug check.
+        //
+        // See `Extended Feature Enable Register (EFER)` for what values are allowed.
+        // TODO: Implement this check
+        //
+        data.guest_vmcb.save_area.efer = value;
+    } else {
+        // The EFER msr, without the SVME flag.
+        //
+        let value = data.guest_vmcb.save_area.efer & !EFER_SVME;
+
+        guest_regs.rax = (value as u32) as u64;
+        guest_regs.rdx = (value >> 32) as u64;
+    }
+}
+
+fn handle_other(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) {
     let msr = guest_regs.rcx as u32;
     let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
 
-    // TODO: Hide psave
+    // Execute rdmsr or wrmsr as requested by the guest.
+    //
+    // Important: This can bug check if the guest tries to access an MSR that is not
+    // supported by            the host. See SimpleSvm for more information
+    // on how to handle this correctly.
+    //
+    if write_access {
+        let low_part = guest_regs.rax as u32;
+        let high_part = guest_regs.rdx as u32;
 
-    // TODO: Is this needed? Since we only get msr from inside the msr permission
-    // bitmap?
+        let value = (high_part as u64) << 32 | low_part as u64;
+
+        unsafe { wrmsr(msr, value) };
+    } else {
+        let value = unsafe { rdmsr(msr) };
+
+        guest_regs.rax = (value as u32) as u64;
+        guest_regs.rdx = (value >> 32) as u64;
+    }
+}
+
+pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
+    let msr = guest_regs.rcx as u32;
+
+    // Check if the msr is valid. TODO: Explain why this is not needed.
+    //
     if !is_valid_msr(msr) {
         dbg_break!();
         EventInjection::gp().inject(data);
         return ExitType::IncrementRIP;
     }
 
-    // Prevent IA32_EFER from being modified
+    // Handle the read/write request
     //
     match msr {
-        IA32_EFER => {
-            dbg_break!();
-            if write_access {
-                let low_part = guest_regs.rax as u32;
-                let high_part = guest_regs.rdx as u32;
-                let value = (high_part as u64) << 32 | low_part as u64;
-
-                // The guest is trying to enable SVM.
-                //
-                // Inject a #GP exception if the guest attempts to clear the flag. The
-                // protection of this bit is required because clearing it would result
-                // in undefined behavior.
-                //
-                if value & EFER_SVME != 0 {
-                    EventInjection::gp().inject(data);
-                }
-
-                // Otherwise, update the msr as requested.
-                //
-                // Note: The value should be checked beforehand to not allow any illegal values
-                // and inject a #GP as needed. If that is not done, the hypervisor attempts to
-                // resume the guest with an invalid EFER value and immediately receives
-                // #VMEXIT due to VMEXIT_INVALID. This would in this case, result in a
-                // bug check.
-                //
-                // See `Extended Feature Enable Register (EFER)` for what values are allowed.
-                // TODO: Implement this check
-                //
-                data.guest_vmcb.save_area.efer = value;
-            } else {
-                // The EFER msr, without the svme flag.
-                //
-                let value = data.guest_vmcb.save_area.efer & !EFER_SVME;
-
-                guest_regs.rax = (value as u32) as u64;
-                guest_regs.rdx = (value >> 32) as u64;
-            }
-        }
+        IA32_EFER => handle_efer(data, guest_regs),
         SVM_MSR_VM_HSAVE_PA => {
-            dbg_break!();
+            log::info!("SVM_MSR_VM_HSAVE_PA hooked");
             guest_regs.rax = 0;
             guest_regs.rdx = 0;
         }
-        _ => {
-            // Execute rdmsr or wrmsr as requested by the guest.
-            //
-            // Important: This can bug check if the guest tries to access an MSR that is not
-            // supported by            the host. See SimpleSvm for more information
-            // on how to handle this correctly.
-            //
-            if write_access {
-                let low_part = guest_regs.rax as u32;
-                let high_part = guest_regs.rdx as u32;
+        SVM_MSR_TSC => {
+            let rdtsc = unsafe { rdtsc() };
+            let rdtsc = rdtsc / RDTSC_MODIFIER;
 
-                let value = (high_part as u64) << 32 | low_part as u64;
-
-                unsafe { wrmsr(msr, value) };
-            } else {
-                let value = unsafe { rdmsr(msr) };
-
-                guest_regs.rax = (value as u32) as u64;
-                guest_regs.rdx = (value >> 32) as u64;
-            }
+            guest_regs.rax = (rdtsc as u32) as u64;
+            guest_regs.rdx = (rdtsc >> 32) as u64;
         }
-    }
+        _ => handle_other(data, guest_regs),
+    };
 
     ExitType::IncrementRIP
 }

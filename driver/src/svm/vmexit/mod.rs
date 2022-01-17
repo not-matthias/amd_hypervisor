@@ -1,7 +1,8 @@
 use crate::{
     debug::dbg_break,
     svm::{
-        data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor_data::ProcessorData},
+        data::{guest::GuestRegisters, processor_data::ProcessorData},
+        msr::EFER_SVME,
         vmcb::control_area::VmExitCode,
         vmexit::{
             cpuid::handle_cpuid,

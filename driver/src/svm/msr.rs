@@ -1,6 +1,9 @@
 use bitfield::bitfield;
 use x86::msr::{rdmsr, wrmsr};
 
+pub const SVM_MSR_TSC: u32 = 0x00000010;
+pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc001_0117;
+pub const EFER_SVME: u64 = 1 << 12;
 pub const SVM_MSR_TSC_RATIO: u32 = 0xC000_0104;
 
 pub fn set_tsc_ratio(ratio: f32) {

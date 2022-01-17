@@ -2,7 +2,7 @@
 
 use crate::svm::vmexit::cpuid::CPUID_IS_INSTALLED;
 use x86::{
-    cpuid::{cpuid, CpuId, Hypervisor},
+    cpuid::{cpuid, CpuId},
     msr::rdmsr,
 };
 

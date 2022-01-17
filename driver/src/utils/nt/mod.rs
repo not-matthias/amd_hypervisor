@@ -102,8 +102,8 @@ pub struct PHYSICAL_MEMORY_RANGE {
 
 #[repr(C)]
 pub struct RTL_BITMAP {
-    SizeOfBitMap: u32,
-    Buffer: *mut u32,
+    pub(crate) SizeOfBitMap: u32,
+    pub(crate) Buffer: *mut u32,
 }
 pub type PRTL_BITMAP = *mut RTL_BITMAP;
 

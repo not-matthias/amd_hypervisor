@@ -3,7 +3,7 @@
 //! References:
 //! - https://github.com/LazyAhora/Hypervisor_detect_ring_0
 
-use crate::svm::data::msr_bitmap::{EFER_SVME, SVM_MSR_VM_HSAVE_PA};
+use crate::svm::msr::{EFER_SVME, SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA};
 use x86::{
     cpuid::cpuid,
     msr::{rdmsr, IA32_EFER},
@@ -118,15 +118,14 @@ pub fn check_rdtsc_rdtsc() -> HvStatus {
 }
 
 pub fn check_rdtsc_msr() -> HvStatus {
-    const TSC_MSR: u32 = 0x10;
     const RUNS: u64 = 1337;
 
     let mut avg = 0;
     without_interrupts(|| {
         for _ in 0..RUNS {
-            let tick_1 = unsafe { rdmsr(TSC_MSR) };
+            let tick_1 = unsafe { rdmsr(SVM_MSR_TSC) };
             let _ = cpuid!(0x0);
-            let tick_2 = unsafe { rdmsr(TSC_MSR) };
+            let tick_2 = unsafe { rdmsr(SVM_MSR_TSC) };
 
             avg += tick_2 - tick_1;
         }

@@ -3,75 +3,112 @@ use crate::utils::{
     nt::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP},
 };
 use core::mem::MaybeUninit;
-use x86::{bits64::paging::BASE_PAGE_SIZE, msr::IA32_EFER};
+use x86::bits64::paging::BASE_PAGE_SIZE;
 
-pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc001_0117;
-pub const EFER_SVME: u64 = 1 << 12;
-pub const CHAR_BIT: u32 = 8;
-pub const BITS_PER_MSR: u32 = 2;
-pub const SECOND_MSR_RANGE_BASE: u32 = 0xc0000000;
-pub const SECOND_MSRPM_OFFSET: u32 = 0x800 * CHAR_BIT;
-
-pub const SVM_MSR_PERMISSIONS_MAP_SIZE: u32 = (BASE_PAGE_SIZE * 2) as u32;
+const CHAR_BIT: u32 = 8;
+const BITS_PER_MSR: u32 = 2;
+const RANGE_SIZE: u32 = 0x800 * CHAR_BIT;
 
 #[repr(C)]
-pub struct Bitmap {
+pub struct MsrBitmap {
     /// 0000_0000 to 0000_1FFF
-    pub msr_bitmap_0: [u8; 2048],
+    pub msr_bitmap_0: [u8; 0x800],
     /// C000_0000 to C000_1FFF
-    pub msr_bitmap_1: [u8; 2048],
+    pub msr_bitmap_1: [u8; 0x800],
     /// C001_0000 to C001_1FFF
-    pub msr_bitmap_2: [u8; 2048],
+    pub msr_bitmap_2: [u8; 0x800],
     /// Reserved
-    pub msr_bitmap_3: [u8; 2048],
+    pub msr_bitmap_3: [u8; 0x800],
 }
-const_assert_eq!(core::mem::size_of::<Bitmap>(), 2 * BASE_PAGE_SIZE);
-// TODO: Figure out how to use this instead.
-
-pub struct MsrBitmap;
+const_assert_eq!(core::mem::size_of::<MsrBitmap>(), 2 * BASE_PAGE_SIZE);
 
 impl MsrBitmap {
-    pub fn new() -> Option<AllocatedMemory<u32>> {
-        let memory = AllocatedMemory::<u32>::alloc_contiguous(BASE_PAGE_SIZE * 2)?;
-
-        // Setup the msr bitmap
-        //
-        Self::build(memory.as_ptr());
-
-        Some(memory)
-    }
-
-    fn build(memory: *mut u32) {
-        log::info!("Building msr permission bitmap");
-
-        // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1465
-        //
+    fn initialize_bitmap(bitmap_ptr: *mut u64) {
         let mut bitmap_header: MaybeUninit<RTL_BITMAP> = MaybeUninit::uninit();
         let bitmap_header_ptr = bitmap_header.as_mut_ptr() as *mut _;
 
-        // Setup and clear all bits, indicating no MSR access should be intercepted.
-        //
         unsafe {
             RtlInitializeBitMap(
                 bitmap_header_ptr as _,
-                memory as _,
-                (SVM_MSR_PERMISSIONS_MAP_SIZE * CHAR_BIT) as u32,
+                bitmap_ptr as _,
+                core::mem::size_of::<Self>() as u32,
             )
         }
         unsafe { RtlClearAllBits(bitmap_header_ptr as _) }
+    }
 
-        // Compute an offset from the second MSR permissions map offset (0x800) for
-        // IA32_MSR_EFER in bits. Then, add an offset until the second MSR
-        // permissions map.
+    fn bitmap_header(bitmap_ptr: *mut u64) -> RTL_BITMAP {
+        // let mut bitmap_header: MaybeUninit<RTL_BITMAP> = MaybeUninit::uninit();
+        // let bitmap_header_ptr = bitmap_header.as_mut_ptr() as *mut _;
         //
-        let offset = (IA32_EFER - SECOND_MSR_RANGE_BASE) * BITS_PER_MSR;
-        let offset = SECOND_MSRPM_OFFSET + offset;
+        // unsafe {
+        //     RtlInitializeBitMap(
+        //         bitmap_header_ptr as _,
+        //         bitmap_ptr as _,
+        //         core::mem::size_of::<Self>() as u32,
+        //     )
+        // }
+        // unsafe { bitmap_header.assume_init() }
 
-        // Set the MSB bit indicating write accesses to the MSR should be
-        // intercepted.
-        //
-        unsafe { RtlSetBits(bitmap_header_ptr as _, (offset + 1) as u32, 1) };
+        RTL_BITMAP {
+            SizeOfBitMap: core::mem::size_of::<Self>() as u32,
+            Buffer: bitmap_ptr as _,
+        }
+    }
 
-        // TODO: Exit on PSAVE msr
+    pub fn new() -> Option<AllocatedMemory<Self>> {
+        let bitmap = AllocatedMemory::<Self>::alloc_contiguous(BASE_PAGE_SIZE * 2)?;
+
+        Self::initialize_bitmap(bitmap.as_ptr() as _);
+
+        Some(bitmap)
+    }
+
+    pub fn hook_msr(&mut self, msr: u32) {
+        self.hook_wrmsr(msr);
+        self.hook_rdmsr(msr);
+    }
+
+    pub fn hook_rdmsr(&mut self, msr: u32) {
+        let offset = Self::msr_range(msr) + Self::msr_offset(msr);
+
+        let mut bitmap_header = Self::bitmap_header(self as *mut _ as _);
+        unsafe { RtlSetBits(&mut bitmap_header as *mut _, offset, 1) };
+    }
+
+    pub fn hook_wrmsr(&mut self, msr: u32) {
+        let offset = Self::msr_range(msr) + Self::msr_offset(msr);
+
+        let mut bitmap_header = Self::bitmap_header(self as *mut _ as _);
+        unsafe { RtlSetBits(&mut bitmap_header as *mut _, offset + 1, 1) };
+    }
+
+    fn msr_offset(msr: u32) -> u32 {
+        (msr & 0xfff) * BITS_PER_MSR
+    }
+
+    /// Returns the offset to the range for the specified MSR.
+    fn msr_range(msr: u32) -> u32 {
+        if (0x0000_0000..=0x0000_1FFF).contains(&msr) {
+            0
+        } else if (0xC000_0000..=0xC000_1FFF).contains(&msr) {
+            1 * RANGE_SIZE
+        } else if (0xC001_0000..=0xC001_1FFF).contains(&msr) {
+            2 * RANGE_SIZE
+        } else {
+            3 * RANGE_SIZE
+        }
+    }
+
+    #[allow(unused)]
+    fn set_bit(&mut self, msr: u32) {
+        // https://github.com/reactos/reactos/blob/3fa57b8ff7fcee47b8e2ed869aecaf4515603f3f/sdk/lib/rtl/bitmap.c#L372-L430
+        // Based on RtlSetBits
+
+        // TODO: Find the correct range
+        let _range = 0;
+        let _offset = msr & 0xffff;
+
+        // TODO: Implement this
     }
 }

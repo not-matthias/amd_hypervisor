@@ -13,13 +13,10 @@ mmap = ["log/release_max_level_off", "no-assertions"]
 
 [dependencies]
 pe = { git = "https://github.com/rust-game-hacks/driver" }
-nt = { git = "https://github.com/rust-game-hacks/driver" }
+nt = { git = "https://github.com/rust-game-hacks/driver" } # TODO: Remove this
 log = { git = "https://github.com/rust-game-hacks/driver" }
-hook = { git = "https://github.com/rust-game-hacks/driver" }
 clean = { git = "https://github.com/rust-game-hacks/driver" }
 km-alloc = { git = "https://github.com/rust-game-hacks/driver" }
-protection = { git = "https://github.com/rust-game-hacks/driver" }
-bypass = { git = "https://github.com/rust-game-hacks/driver" }
 
 snafu = { version = "0.7.0", default-features = false, features = [] }
 tinyvec = { version = "1.5.1", features = ["default", "nightly_slice_partition_dedup"] }
