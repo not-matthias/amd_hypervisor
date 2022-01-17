@@ -36,19 +36,16 @@ pub fn is_svm_supported() -> bool {
 
     // Check features that are used by this hypervisor
     //
-    if !CpuId::new()
-        .get_svm_info()
-        .map(|svm_info| {
-            let tsc_rate_msr = svm_info.has_tsc_rate_msr();
-            let nested_paging = svm_info.has_nested_paging();
+    let svm_features_supported = CpuId::new().get_svm_info().map(|svm_info| {
+        let tsc_rate_msr = svm_info.has_tsc_rate_msr();
+        let nested_paging = svm_info.has_nested_paging();
 
-            log::info!("TSC rate MSR: {}", tsc_rate_msr);
-            log::info!("Nested paging: {}", nested_paging);
+        log::info!("TSC rate MSR: {}", tsc_rate_msr);
+        log::info!("Nested paging: {}", nested_paging);
 
-            tsc_rate_msr && nested_paging
-        })
-        .unwrap_or_default()
-    {
+        tsc_rate_msr && nested_paging
+    });
+    if !svm_features_supported.unwrap_or_default() {
         log::warn!("Some features needed for this hypervisor are not available.");
     }
 

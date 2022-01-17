@@ -15,12 +15,12 @@ use crate::{
     },
 };
 use core::{arch::asm, ptr::NonNull};
-use nt::include::PVOID;
 use x86::{bits64::paging::BASE_PAGE_SIZE, msr::wrmsr};
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
-pub const STACK_CONTENTS_SIZE: usize =
-    KERNEL_STACK_SIZE - (core::mem::size_of::<PVOID>() * 6) - core::mem::size_of::<KTRAP_FRAME>();
+pub const STACK_CONTENTS_SIZE: usize = KERNEL_STACK_SIZE
+    - (core::mem::size_of::<*mut u64>() * 6)
+    - core::mem::size_of::<KTRAP_FRAME>();
 
 #[repr(C, align(4096))]
 pub struct HostStackLayout {

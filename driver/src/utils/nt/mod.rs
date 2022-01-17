@@ -3,14 +3,16 @@
 #![allow(bad_style)]
 #![allow(missing_docs)]
 
-use nt::include::HANDLE;
 use winapi::{
-    km::wdm::{KIRQL, KPROCESSOR_MODE, POOL_TYPE},
+    km::{
+        ndis::PMDL,
+        wdm::{KIRQL, KPROCESSOR_MODE, PIRP, POOL_TYPE},
+    },
     shared::{
         basetsd::SIZE_T,
         ntdef::{
-            LARGE_INTEGER, NTSTATUS, OBJECT_ATTRIBUTES, PGROUP_AFFINITY, PHANDLE, PHYSICAL_ADDRESS,
-            PPROCESSOR_NUMBER, PVOID,
+            HANDLE, LARGE_INTEGER, NTSTATUS, OBJECT_ATTRIBUTES, PGROUP_AFFINITY, PHANDLE,
+            PHYSICAL_ADDRESS, PPROCESSOR_NUMBER, PVOID, ULONG,
         },
     },
     um::winnt::PCONTEXT,
@@ -25,7 +27,10 @@ pub type KSTART_ROUTINE = extern "system" fn(*mut u64);
 
 extern "system" {
     pub static KdDebuggerNotPresent: *mut bool;
+}
 
+#[link(name = "ntoskrnl")]
+extern "system" {
     pub fn ExAllocatePool(PoolType: POOL_TYPE, NumberOfBytes: SIZE_T) -> PVOID;
 
     pub fn ExFreePool(P: PVOID);
@@ -86,6 +91,22 @@ extern "system" {
     pub fn ExAllocatePoolWithTag(PoolType: u32, NumberOfBytes: usize, Tag: u32) -> u64;
 
     pub fn KeInvalidateAllCaches() -> bool;
+
+    pub fn MmIsAddressValid(address: *mut u64) -> bool;
+
+    pub fn IoAllocateMdl(
+        VirtualAddress: PVOID, Length: ULONG, SecondaryBuffer: bool, ChargeQuota: bool, Irp: PIRP,
+    ) -> PMDL;
+
+    pub fn IoFreeMdl(Mdl: PMDL);
+
+    pub fn MmProbeAndLockPages(
+        MemoryDescriptorList: PMDL, AccessMode: KPROCESSOR_MODE, Operation: LOCK_OPERATION,
+    );
+
+    pub fn MmUnlockPages(MemoryDescriptorList: PMDL);
+
+    pub fn MmGetSystemRoutineAddress(SystemRoutineName: *mut u64) -> *mut u64;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes
@@ -255,4 +276,11 @@ pub enum MEMORY_CACHING_TYPE {
     MmUSWCCached,
     MmMaximumCacheType,
     MmNotMapped = -1,
+}
+
+#[repr(C)]
+pub enum LOCK_OPERATION {
+    IoReadAccess,
+    IoWriteAccess,
+    IoModifyAccess,
 }

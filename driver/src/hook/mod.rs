@@ -4,9 +4,10 @@ use crate::utils::{
     addresses::PhysicalAddress,
     inline_hook::FunctionHook,
     memory::AllocatedMemory,
-    nt::{irql::assert_paged_code, RtlCopyMemory},
+    nt::{irql::assert_paged_code, MmGetSystemRoutineAddress, RtlCopyMemory},
 };
-use nt::kernel::get_system_routine_address;
+
+use windy::{UnicodeString, WStr};
 use x86::bits64::paging::{PAddr, VAddr, BASE_PAGE_SIZE};
 use x86_64::instructions::interrupts::without_interrupts;
 
@@ -121,10 +122,19 @@ impl Hook {
     }
 
     pub fn hook_function(name: &str, handler: *const ()) -> Option<Self> {
-        let address = get_system_routine_address(name)? as u64;
-        log::info!("Found function address of {}: {:#x}", &name, address);
+        let wide_string = widestring::U16CString::from_str(name).ok()?;
+        let wide_string = unsafe { WStr::from_raw(wide_string.as_ptr()) }; // TODO: Check if this contains the null character
 
-        Self::hook_function_ptr(address, handler)
+        let mut wide_string = UnicodeString::new(wide_string);
+        let address = unsafe { MmGetSystemRoutineAddress(wide_string.as_mut_ptr() as _) };
+        if address.is_null() {
+            log::error!("Could not find function: {}", name);
+            return None;
+        }
+
+        log::info!("Found function address of {}: {:p}", name, address);
+
+        Self::hook_function_ptr(address as u64, handler)
     }
 
     pub fn hook_page(address: u64) -> Option<Self> {

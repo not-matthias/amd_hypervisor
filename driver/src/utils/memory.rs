@@ -2,13 +2,12 @@
 
 use crate::utils::nt::{
     ExAllocatePool, ExFreePool, MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
-    MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
+    MmIsAddressValid, MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
 use core::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-use nt::include::MmIsAddressValid;
 use winapi::{
     km::wdm::POOL_TYPE::NonPagedPool, shared::ntdef::PHYSICAL_ADDRESS, um::winnt::RtlZeroMemory,
 };

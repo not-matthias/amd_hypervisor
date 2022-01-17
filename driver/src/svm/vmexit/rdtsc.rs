@@ -10,8 +10,8 @@ pub fn handle_rdtsc(_data: &mut ProcessorData, regs: &mut GuestRegisters) -> Exi
     let rdtsc = unsafe { rdtsc() };
     let rdtsc = (rdtsc / RDTSC_MODIFIER) as i64;
 
-    regs.rax = (rdtsc & -1) as u64;
-    regs.rdx = ((rdtsc >> 32) & -1) as u64;
+    regs.rax = (rdtsc as u32) as u64;
+    regs.rdx = (rdtsc >> 32) as u64;
 
     ExitType::IncrementRIP
 }

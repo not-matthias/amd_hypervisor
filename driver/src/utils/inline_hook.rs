@@ -1,16 +1,16 @@
 use crate::utils::{
     memory::AllocatedMemory,
-    nt::{KeInvalidateAllCaches, RtlCopyMemory},
+    nt::{
+        IoAllocateMdl, IoFreeMdl, KeInvalidateAllCaches, MmProbeAndLockPages, MmUnlockPages,
+        RtlCopyMemory, LOCK_OPERATION::IoReadAccess,
+    },
 };
 use alloc::{vec, vec::Vec};
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, InstructionBlock,
 };
-use nt::include::{
-    IoAllocateMdl, IoFreeMdl, MmProbeAndLockPages, MmUnlockPages, KPROCESSOR_MODE::KernelMode,
-    LOCK_OPERATION::IoReadAccess, PMDL,
-};
 use snafu::prelude::*;
+use winapi::km::{ndis::PMDL, wdm::KPROCESSOR_MODE::KernelMode};
 use x86::bits64::paging::BASE_PAGE_SIZE;
 
 pub const JMP_SHELLCODE_LEN: usize = 14;

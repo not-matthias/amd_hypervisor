@@ -88,6 +88,7 @@ impl MsrBitmap {
     }
 
     /// Returns the offset to the range for the specified MSR.
+    #[allow(clippy::identity_op)]
     fn msr_range(msr: u32) -> u32 {
         if (0x0000_0000..=0x0000_1FFF).contains(&msr) {
             0

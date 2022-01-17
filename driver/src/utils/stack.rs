@@ -1,7 +1,6 @@
-use crate::utils::nt::RtlCaptureContext;
+use crate::utils::nt::{MmIsAddressValid, RtlCaptureContext};
 use alloc::vec::Vec;
 use core::mem::MaybeUninit;
-use nt::include::MmIsAddressValid;
 use winapi::um::winnt::{RtlLookupFunctionEntry, RtlVirtualUnwind, CONTEXT, UNW_FLAG_NHANDLER};
 
 fn get_context() -> CONTEXT {

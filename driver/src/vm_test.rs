@@ -87,7 +87,7 @@ pub fn check_rdtsc_cpuid_rdtsc() -> HvStatus {
 
     log::info!("Average rdtsc: {}", avg);
 
-    if avg > 500 || avg < 25 {
+    if !(25..=500).contains(&avg) {
         HvStatus::HypervisorPresent
     } else {
         HvStatus::HypervisorNotPresent
@@ -110,7 +110,7 @@ pub fn check_rdtsc_rdtsc() -> HvStatus {
 
     log::info!("Average rdtsc: {}", avg);
 
-    if avg > 500 || avg < 25 {
+    if !(25..=500).contains(&avg) {
         HvStatus::HypervisorPresent
     } else {
         HvStatus::HypervisorNotPresent
@@ -134,7 +134,7 @@ pub fn check_rdtsc_msr() -> HvStatus {
 
     log::info!("Average rdtsc_msr: {}", avg);
 
-    if avg > 500 || avg < 25 {
+    if !(25..=500).contains(&avg) {
         HvStatus::HypervisorPresent
     } else {
         HvStatus::HypervisorNotPresent
@@ -157,7 +157,7 @@ pub fn check_aperf() -> HvStatus {
     });
     avg /= RUNS;
 
-    if avg < 0x00000BE30000 || avg > 0x00000FFF0000000 {
+    if !(0x00000BE30000..=0x00000FFF0000000).contains(&avg) {
         log::warn!("Invalid aperf value: {:?}", avg);
         HvStatus::HypervisorPresent
     } else {
@@ -181,7 +181,7 @@ pub fn check_mperf() -> HvStatus {
     });
     avg /= RUNS;
 
-    if avg < 0xc || avg > 0xff {
+    if !(0xc..=0xff).contains(&avg) {
         log::warn!("Invalid mperf value: {:?}", avg);
         HvStatus::HypervisorPresent
     } else {

@@ -1,14 +1,14 @@
-use crate::utils::{inline_hook::FunctionHook, ptr::Pointer};
-use nt::include::{PULONG, PVOID, SYSTEM_INFORMATION_CLASS, ULONG};
-use winapi::shared::ntdef::NTSTATUS;
+use crate::utils::{inline_hook::FunctionHook, nt::MmIsAddressValid, ptr::Pointer};
+use winapi::{
+    shared::ntdef::{NTSTATUS, PULONG, ULONG},
+    um::winnt::PVOID,
+};
 
 pub static mut ZWQSI_ORIGINAL: Option<Pointer<FunctionHook>> = None;
 pub fn zw_query_system_information(
     system_information_class: u32, system_information: PVOID, system_information_length: ULONG,
     return_length: PULONG,
 ) -> NTSTATUS {
-    const_assert!(core::mem::size_of::<SYSTEM_INFORMATION_CLASS>() == 0x4);
-
     log::info!(
         "Called zw_query_system_information({:?}, {:x}, {:x}, {:p})",
         system_information_class,
@@ -90,6 +90,6 @@ pub fn test_hooks() {
     // Test MmIsAddressValid
     //
     log::info!("Is address valid: {:?}", unsafe {
-        nt::include::MmIsAddressValid(0 as _)
+        MmIsAddressValid(0 as _)
     });
 }

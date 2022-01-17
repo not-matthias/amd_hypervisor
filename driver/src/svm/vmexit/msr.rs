@@ -135,7 +135,6 @@ pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> 
     match msr {
         IA32_EFER => handle_efer(data, guest_regs),
         SVM_MSR_VM_HSAVE_PA => {
-            log::info!("SVM_MSR_VM_HSAVE_PA hooked");
             guest_regs.rax = 0;
             guest_regs.rdx = 0;
         }
