@@ -9,6 +9,8 @@ pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> 
     let msr = guest_regs.rcx as u32;
     let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
 
+    // TODO: Hide psave
+
     // Prevent IA32_EFER from being modified
     //
     if msr == IA32_EFER {
@@ -18,6 +20,8 @@ pub fn handle_msr(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> 
         let low_part = guest_regs.rax as u32;
         let high_part = guest_regs.rdx as u32;
         let value = (high_part as u64) << 32 | low_part as u64;
+
+        // TODO: Hide: EFER_SVME
 
         // The guest is trying to enable SVM.
         //

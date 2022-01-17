@@ -2,28 +2,28 @@ use crate::{
     debug::dbg_break,
     svm::{
         data::{guest::GuestRegisters, msr_bitmap::EFER_SVME, processor_data::ProcessorData},
-        vmcb::control_area::{VmExitCode},
+        vmcb::control_area::VmExitCode,
         vmexit::{
             cpuid::handle_cpuid,
             msr::handle_msr,
             page_fault::{handle_break_point_exception, handle_nested_page_fault},
+            rdtsc::handle_rdtsc,
             vmrun::handle_vmrun,
         },
     },
     utils::{
-        addresses::{physical_address},
+        addresses::physical_address,
         nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
         ptr::Pointer,
     },
 };
 use core::arch::asm;
-use x86::{
-    msr::{rdmsr, wrmsr, IA32_EFER},
-};
+use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod cpuid;
 pub mod msr;
 pub mod page_fault;
+pub mod rdtsc;
 pub mod vmrun;
 
 #[derive(PartialOrd, PartialEq)]
@@ -100,6 +100,7 @@ unsafe extern "stdcall" fn handle_vmexit(
         VmExitCode::VMEXIT_VMRUN => handle_vmrun(&mut data, &mut guest_regs),
         VmExitCode::VMEXIT_EXCEPTION_BP => handle_break_point_exception(&mut data, &mut guest_regs),
         VmExitCode::VMEXIT_NPF => handle_nested_page_fault(&mut data, &mut guest_regs),
+        VmExitCode::VMEXIT_RDTSC => handle_rdtsc(&mut data, &mut guest_regs),
         _ => {
             // Invalid #VMEXIT. This should never happen.
             //

@@ -12,13 +12,12 @@ no-assertions = []
 mmap = ["log/release_max_level_off", "no-assertions"]
 
 [dependencies]
-kernel-alloc = "0.1.0"
-
 pe = { git = "https://github.com/rust-game-hacks/driver" }
 nt = { git = "https://github.com/rust-game-hacks/driver" }
 log = { git = "https://github.com/rust-game-hacks/driver" }
 hook = { git = "https://github.com/rust-game-hacks/driver" }
 clean = { git = "https://github.com/rust-game-hacks/driver" }
+km-alloc = { git = "https://github.com/rust-game-hacks/driver" }
 protection = { git = "https://github.com/rust-game-hacks/driver" }
 bypass = { git = "https://github.com/rust-game-hacks/driver" }
 
@@ -37,7 +36,7 @@ static_assertions = "1.1.0"
 
 [profile.release]
 lto = "fat"
-debug = true
+#debug = true
 panic = "abort"
 overflow-checks = false
 debug-assertions = false
