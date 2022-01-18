@@ -8,7 +8,7 @@ use crate::{
     svm::{
         data::{processor_data::ProcessorData, shared_data::SharedData},
         msr::EFER_SVME,
-        vmexit::cpuid::CPUID_DEVIRTUALIZE,
+        vmexit::{cpuid::CPUID_DEVIRTUALIZE, VmExitHandler},
         vmlaunch::launch_vm,
     },
     utils::{
@@ -31,12 +31,21 @@ pub mod vmcb;
 pub mod vmexit;
 pub mod vmlaunch;
 
-pub struct Processors {
+pub enum VmExitType {
+    Cpuid,
+    Msr,
+    Vmrun,
+    Breakpoint,
+    Npt,
+    Rdtsc,
+}
+
+pub struct Hypervisor {
     shared_data: Box<SharedData>,
     processors: Vec<Processor>,
 }
 
-impl Processors {
+impl Hypervisor {
     /// Creates new instance for all the processors on the system.
     pub fn new(hook: Vec<Hook>) -> Option<Self> {
         if !support::is_svm_supported() {
@@ -54,6 +63,19 @@ impl Processors {
             shared_data: SharedData::new(hook)?,
             processors,
         })
+    }
+
+    pub fn with_handler(self, vmexit_type: VmExitType, handler: VmExitHandler) -> Self {
+        match vmexit_type {
+            VmExitType::Cpuid => vmexit::CPUID_HANDLER.set(box handler),
+            VmExitType::Msr => vmexit::MSR_HANDLER.set(box handler),
+            VmExitType::Vmrun => vmexit::VMRUN_HANDLER.set(box handler),
+            VmExitType::Breakpoint => vmexit::BREAKPOINT_HANDLER.set(box handler),
+            VmExitType::Npt => vmexit::NPT_HANDLER.set(box handler),
+            VmExitType::Rdtsc => vmexit::RDTSC_HANDLER.set(box handler),
+        }
+
+        self
     }
 
     pub fn virtualize(&mut self) -> bool {

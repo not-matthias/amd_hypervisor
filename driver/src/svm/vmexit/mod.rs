@@ -18,6 +18,7 @@ use crate::{
     },
 };
 use core::{arch::asm, ptr::NonNull};
+use once_cell::race::OnceBox;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod cpuid;
@@ -25,6 +26,15 @@ pub mod msr;
 pub mod page_fault;
 pub mod rdtsc;
 pub mod vmrun;
+
+pub type VmExitHandler = fn(&mut ProcessorData, &mut GuestRegisters) -> ExitType;
+
+pub(crate) static CPUID_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
+pub(crate) static MSR_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
+pub(crate) static VMRUN_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
+pub(crate) static BREAKPOINT_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
+pub(crate) static NPT_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
+pub(crate) static RDTSC_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
 
 #[derive(PartialOrd, PartialEq)]
 pub enum ExitType {

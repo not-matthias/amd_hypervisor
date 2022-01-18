@@ -10,6 +10,7 @@
 #![feature(alloc_error_handler)]
 #![feature(new_uninit)]
 #![feature(allocator_api)]
+#![feature(box_syntax)]
 #![allow(clippy::new_ret_no_self)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
@@ -20,7 +21,7 @@ extern crate alloc;
 use crate::{
     debug::dbg_break,
     hook::{handlers, testing, Hook, HookType},
-    svm::Processors,
+    svm::Hypervisor,
     utils::{
         logger::KernelLogger,
         nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
@@ -49,23 +50,22 @@ pub mod vm_test;
 static GLOBAL: utils::alloc::KernelAlloc = utils::alloc::KernelAlloc;
 static LOGGER: KernelLogger = KernelLogger;
 
-static mut PROCESSORS: Option<Processors> = None;
+static mut HYPERVISOR: Option<Hypervisor> = None;
 
 fn init_hooks() -> Option<Vec<Hook>> {
+    macro save_hook($hook:expr, $global_hook:expr) {
+        if let HookType::Function { ref inline_hook } = $hook.hook_type {
+            unsafe { $global_hook = Some(core::mem::transmute(inline_hook.trampoline_address())) };
+        }
+    }
+
     // ZwQuerySystemInformation
     //
-    // let zwqsi_hook = Hook::hook_function(
-    //     "ZwQuerySystemInformation",
-    //     handlers::zw_query_system_information as *const (),
-    // )?;
-    // unsafe {
-    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-    //         HookType::Function { ref inline_hook } => {
-    //             Pointer::new(inline_hook.trampoline_address() as _)
-    //         }
-    //         HookType::Page => None,
-    //     };
-    // }
+    let zwqsi_hook = Hook::hook_function(
+        "ZwQuerySystemInformation",
+        handlers::zw_query_system_information as *const (),
+    )?;
+    save_hook!(zwqsi_hook, handlers::ZWQSI_ORIGINAL);
 
     // // ExAllocatePoolWithTag
     // //
@@ -102,23 +102,23 @@ fn init_hooks() -> Option<Vec<Hook>> {
     // TODO: Check if this is true
     // TODO: Use once_cell for this
 
-    Some(vec![])
+    Some(vec![zwqsi_hook])
 }
 
 fn virtualize_system() -> Option<()> {
     let hooks = init_hooks()?;
-    let Some(mut processors) = Processors::new(hooks) else {
+    let Some(mut hv) = Hypervisor::new(hooks) else {
         log::info!("Failed to create processors");
         return None;
     };
 
-    if !processors.virtualize() {
+    if !hv.virtualize() {
         log::error!("Failed to virtualize processors");
     }
 
     // Save the processors for later use
     //
-    unsafe { PROCESSORS = Some(processors) };
+    unsafe { HYPERVISOR = Some(hv) };
 
     Some(())
 }
@@ -127,10 +127,10 @@ fn virtualize_system() -> Option<()> {
 pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     // Devirtualize all processors and drop the global struct.
     //
-    if let Some(mut processors) = unsafe { PROCESSORS.take() } {
-        processors.devirtualize();
+    if let Some(mut hv) = unsafe { HYPERVISOR.take() } {
+        hv.devirtualize();
 
-        core::mem::drop(processors);
+        core::mem::drop(hv);
     }
 }
 
