@@ -6,5 +6,4 @@ pub mod logger;
 pub mod nt;
 pub mod physmem_descriptor;
 pub mod processor;
-pub mod ptr;
 pub mod stack;

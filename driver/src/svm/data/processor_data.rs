@@ -10,7 +10,6 @@ use crate::{
     utils::{
         addresses::physical_address,
         nt::{Context, KTRAP_FRAME},
-        ptr::Pointer,
     },
 };
 use alloc::boxed::Box;
@@ -31,8 +30,8 @@ pub struct HostStackLayout {
     pub guest_vmcb_pa: u64,
     pub host_vmcb_pa: u64,
 
-    pub self_data: Pointer<ProcessorData>,
-    pub shared_data: Pointer<SharedData>,
+    pub self_data: NonNull<ProcessorData>,
+    pub shared_data: NonNull<SharedData>,
 
     /// To keep HostRsp 16 bytes aligned
     pub padding_1: u64,
@@ -177,9 +176,8 @@ impl ProcessorData {
         log::info!("Setting up the stack layout");
         self.host_stack_layout.reserved_1 = u64::MAX;
         self.host_stack_layout.shared_data =
-            Pointer(unsafe { NonNull::new_unchecked(shared_data as *mut _) });
-        self.host_stack_layout.self_data =
-            Pointer(unsafe { NonNull::new_unchecked(self as *mut _) });
+            unsafe { NonNull::new_unchecked(shared_data as *mut _) };
+        self.host_stack_layout.self_data = unsafe { NonNull::new_unchecked(self as *mut _) };
         self.host_stack_layout.host_vmcb_pa = host_vmcb_pa.as_u64();
         self.host_stack_layout.guest_vmcb_pa = guest_vmcb_pa.as_u64();
     }

@@ -25,7 +25,6 @@ use crate::{
         logger::KernelLogger,
         nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
         physmem_descriptor::PhysicalMemoryDescriptor,
-        ptr::Pointer,
     },
 };
 use alloc::{vec, vec::Vec};
@@ -55,18 +54,18 @@ static mut PROCESSORS: Option<Processors> = None;
 fn init_hooks() -> Option<Vec<Hook>> {
     // ZwQuerySystemInformation
     //
-    let zwqsi_hook = Hook::hook_function(
-        "ZwQuerySystemInformation",
-        handlers::zw_query_system_information as *const (),
-    )?;
-    unsafe {
-        handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-            HookType::Function { ref inline_hook } => {
-                Pointer::new(inline_hook.trampoline_address() as _)
-            }
-            HookType::Page => None,
-        };
-    }
+    // let zwqsi_hook = Hook::hook_function(
+    //     "ZwQuerySystemInformation",
+    //     handlers::zw_query_system_information as *const (),
+    // )?;
+    // unsafe {
+    //     handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
+    //         HookType::Function { ref inline_hook } => {
+    //             Pointer::new(inline_hook.trampoline_address() as _)
+    //         }
+    //         HookType::Page => None,
+    //     };
+    // }
 
     // // ExAllocatePoolWithTag
     // //
@@ -103,7 +102,7 @@ fn init_hooks() -> Option<Vec<Hook>> {
     // TODO: Check if this is true
     // TODO: Use once_cell for this
 
-    Some(vec![zwqsi_hook])
+    Some(vec![])
 }
 
 fn virtualize_system() -> Option<()> {

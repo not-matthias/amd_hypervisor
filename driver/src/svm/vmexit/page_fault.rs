@@ -11,7 +11,7 @@ use crate::{
 };
 
 pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
-    let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
+    let hooked_npt = unsafe { &mut data.host_stack_layout.shared_data.as_mut().hooked_npt };
 
     // Find the handler address for the current instruction pointer (RIP) and
     // transfer the execution to it. If we couldn't find a hook, we inject the
@@ -38,7 +38,7 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
 }
 
 pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
-    let hooked_npt = &mut data.host_stack_layout.shared_data.hooked_npt;
+    let hooked_npt = unsafe { &mut data.host_stack_layout.shared_data.as_mut().hooked_npt };
 
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault
     // Ordering`

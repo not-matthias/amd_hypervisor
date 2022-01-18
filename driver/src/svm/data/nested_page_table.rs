@@ -141,6 +141,7 @@ impl NestedPageTable {
     pub fn identity_4kb(access_type: AccessType) -> Box<NestedPageTable> {
         log::info!("Building nested page tables with 4KB pages");
 
+        // TODO: Fix
         let mut npt = unsafe { Box::<Self>::new_zeroed().assume_init() };
 
         log::info!("Mapping 512GB of physical memory");

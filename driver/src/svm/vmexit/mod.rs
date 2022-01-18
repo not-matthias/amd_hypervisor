@@ -15,10 +15,9 @@ use crate::{
     utils::{
         addresses::physical_address,
         nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
-        ptr::Pointer,
     },
 };
-use core::arch::asm;
+use core::{arch::asm, ptr::NonNull};
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod cpuid;
@@ -74,8 +73,11 @@ unsafe fn exit_hypervisor(data: &mut ProcessorData, guest_regs: &mut GuestRegist
 
 #[no_mangle]
 unsafe extern "stdcall" fn handle_vmexit(
-    mut data: Pointer<ProcessorData>, mut guest_regs: Pointer<GuestRegisters>,
+    mut data: NonNull<ProcessorData>, mut guest_regs: NonNull<GuestRegisters>,
 ) -> u8 {
+    let data = data.as_mut();
+    let guest_regs = guest_regs.as_mut();
+
     // Load host state that is not loaded on #VMEXIT.
     //
     asm!("vmload rax", in("rax") data.host_stack_layout.host_vmcb_pa);
@@ -96,12 +98,12 @@ unsafe extern "stdcall" fn handle_vmexit(
     // Handle #VMEXIT
     //
     let exit_type = match data.guest_vmcb.control_area.exit_code {
-        VmExitCode::VMEXIT_CPUID => handle_cpuid(&mut data, &mut guest_regs),
-        VmExitCode::VMEXIT_MSR => handle_msr(&mut data, &mut guest_regs),
-        VmExitCode::VMEXIT_VMRUN => handle_vmrun(&mut data, &mut guest_regs),
-        VmExitCode::VMEXIT_EXCEPTION_BP => handle_break_point_exception(&mut data, &mut guest_regs),
-        VmExitCode::VMEXIT_NPF => handle_nested_page_fault(&mut data, &mut guest_regs),
-        VmExitCode::VMEXIT_RDTSC => handle_rdtsc(&mut data, &mut guest_regs),
+        VmExitCode::VMEXIT_CPUID => handle_cpuid(data, guest_regs),
+        VmExitCode::VMEXIT_MSR => handle_msr(data, guest_regs),
+        VmExitCode::VMEXIT_VMRUN => handle_vmrun(data, guest_regs),
+        VmExitCode::VMEXIT_EXCEPTION_BP => handle_break_point_exception(data, guest_regs),
+        VmExitCode::VMEXIT_NPF => handle_nested_page_fault(data, guest_regs),
+        VmExitCode::VMEXIT_RDTSC => handle_rdtsc(data, guest_regs),
         _ => {
             // Invalid #VMEXIT. This should never happen.
             //
@@ -115,7 +117,7 @@ unsafe extern "stdcall" fn handle_vmexit(
     // Handle the exit status of the vmexit handlers
     //
     match exit_type {
-        ExitType::ExitHypervisor => exit_hypervisor(&mut data, &mut guest_regs),
+        ExitType::ExitHypervisor => exit_hypervisor(data, guest_regs),
         ExitType::IncrementRIP => {
             // Reflect potentially updated guest's RAX to VMCB. Again, unlike other GPRs,
             // RAX is loaded from VMCB on VMRUN. Afterwards, advance RIP to "complete" the
