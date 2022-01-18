@@ -1,8 +1,9 @@
 use crate::{
     svm::paging::{AccessType, PFN_MASK, _2MB, _512GB},
-    utils::{addresses::physical_address, memory::AllocatedMemory},
+    utils::addresses::physical_address,
     PhysicalMemoryDescriptor,
 };
+use alloc::boxed::Box;
 use elain::Align;
 use x86::bits64::paging::{
     pd_index, pdpt_index, pml4_index, pt_index, PAddr, PDEntry, PDFlags, PDPTEntry, PDPTFlags,
@@ -56,11 +57,11 @@ impl NestedPageTable {
     /// Here's a list of useful references in popular projects:
     /// - [hvpp](https://github.com/wbenny/hvpp/blob/master/src/hvpp/hvpp/ept.cpp#L41)
     /// - [gbhv](https://github.com/Gbps/gbhv/blob/master/gbhv/ept.c#L167)
-    pub fn identity() -> Option<AllocatedMemory<Self>> {
+    pub fn identity() -> Box<Self> {
         log::info!("Building nested page tables");
 
-        let mut npt =
-            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+        let npt: NestedPageTable = unsafe { core::mem::zeroed() };
+        let mut npt = Box::new(npt);
 
         // PML4
         //
@@ -79,7 +80,12 @@ impl NestedPageTable {
         // could be accesses to other arrays that we are currently iterating
         // over. This is NOT the case here, so we can use unsafe.
         //
-        for (i, pdp) in unsafe { (*npt.inner().as_ptr()).pdp_entries.iter_mut().enumerate() } {
+        for (i, pdp) in unsafe {
+            (*(npt.as_mut() as *mut NestedPageTable))
+                .pdp_entries
+                .iter_mut()
+                .enumerate()
+        } {
             let pa = physical_address(npt.pd_entries[i].as_ptr() as _);
             *pdp = PDPTEntry::new(
                 pa,
@@ -115,44 +121,42 @@ impl NestedPageTable {
             }
         }
 
-        Some(npt)
+        npt
     }
 
-    pub fn identity_2mb(access_type: AccessType) -> Option<AllocatedMemory<Self>> {
+    pub fn identity_2mb(access_type: AccessType) -> Box<Self> {
         log::info!("Building nested page tables with 2MB pages");
 
-        let mut npt =
-            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+        let npt = Box::<Self>::new_zeroed();
+        let mut npt = unsafe { npt.assume_init() };
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(_2MB) {
             npt.map_2mb(pa, pa, access_type);
         }
 
-        Some(npt)
+        npt
     }
 
-    pub fn identity_4kb(access_type: AccessType) -> Option<AllocatedMemory<Self>> {
+    pub fn identity_4kb(access_type: AccessType) -> Box<NestedPageTable> {
         log::info!("Building nested page tables with 4KB pages");
 
-        let mut npt =
-            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+        let mut npt = unsafe { Box::<Self>::new_zeroed().assume_init() };
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(BASE_PAGE_SIZE) {
             npt.map_4kb(pa, pa, access_type);
         }
 
-        Some(npt)
+        npt
     }
 
     /// Builds the nested page table to cover for the entire physical memory
     /// address space.
     #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
-    pub fn system(access_type: AccessType) -> Option<AllocatedMemory<Self>> {
+    pub fn system(access_type: AccessType) -> Box<NestedPageTable> {
         let desc = PhysicalMemoryDescriptor::new();
-        let mut npt =
-            AllocatedMemory::<Self>::alloc_aligned(core::mem::size_of::<NestedPageTable>())?;
+        let mut npt = unsafe { Box::<Self>::new_zeroed().assume_init() };
 
         for pa in (0..desc.total_size()).step_by(_2MB) {
             npt.map_2mb(pa as u64, pa as u64, access_type);
@@ -167,7 +171,7 @@ impl NestedPageTable {
         //
         // npt.map_2mb(apic_base, apic_base, access_type);
 
-        Some(npt)
+        npt
     }
 
     //

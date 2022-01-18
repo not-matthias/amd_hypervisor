@@ -1,10 +1,10 @@
-use crate::utils::{inline_hook::FunctionHook, nt::MmIsAddressValid, ptr::Pointer};
+use crate::utils::{function_hook::FunctionHook, nt::MmIsAddressValid, ptr::Pointer};
 use winapi::{
     shared::ntdef::{NTSTATUS, PULONG, ULONG},
     um::winnt::PVOID,
 };
 
-pub static mut ZWQSI_ORIGINAL: Option<Pointer<FunctionHook>> = None;
+pub static mut ZWQSI_ORIGINAL: Option<Pointer<*mut u64>> = None;
 pub fn zw_query_system_information(
     system_information_class: u32, system_information: PVOID, system_information_length: ULONG,
     return_length: PULONG,
@@ -21,7 +21,7 @@ pub fn zw_query_system_information(
     //
     let fn_ptr = unsafe {
         core::mem::transmute::<_, fn(u32, PVOID, ULONG, PULONG) -> NTSTATUS>(
-            ZWQSI_ORIGINAL.as_ref().unwrap().trampoline_address(),
+            ZWQSI_ORIGINAL.as_ref().unwrap(),
         )
     };
 

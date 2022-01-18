@@ -12,13 +12,12 @@ use crate::{
         vmlaunch::launch_vm,
     },
     utils::{
-        memory::AllocatedMemory,
         nt::Context,
         processor::{processor_count, ProcessorExecutor},
     },
     KeBugCheck, MANUALLY_INITIATED_CRASH,
 };
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 use x86::{
     cpuid::cpuid,
     msr::{rdmsr, wrmsr, IA32_EFER},
@@ -33,7 +32,7 @@ pub mod vmexit;
 pub mod vmlaunch;
 
 pub struct Processors {
-    shared_data: AllocatedMemory<SharedData>,
+    shared_data: Box<SharedData>,
     processors: Vec<Processor>,
 }
 
@@ -116,7 +115,7 @@ pub struct Processor {
     /// The index of the processor.
     index: u32,
 
-    processor_data: AllocatedMemory<ProcessorData>,
+    processor_data: Box<ProcessorData>,
 }
 
 impl Processor {
@@ -125,7 +124,7 @@ impl Processor {
 
         Some(Self {
             index,
-            processor_data: ProcessorData::new()?,
+            processor_data: ProcessorData::new(),
         })
     }
 

@@ -16,7 +16,7 @@ fn get_windows_kits_dir() -> Result<PathBuf, Error> {
     Ok(dir.into())
 }
 
-fn get_km_dir(windows_kits_dir: &PathBuf) -> Result<PathBuf, Error> {
+fn get_km_dir(windows_kits_dir: &Path) -> Result<PathBuf, Error> {
     let readdir = Path::new(windows_kits_dir).join("lib").read_dir()?;
 
     let max_libdir = readdir

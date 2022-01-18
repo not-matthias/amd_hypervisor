@@ -1,12 +1,11 @@
 //! This modules contains some code to be able to test the hooking system
 //! easier.
 
-use crate::{
-    utils::{addresses::PhysicalAddress, memory::AllocatedMemory},
-    FunctionHook,
-};
+use crate::utils::addresses::PhysicalAddress;
+use alloc::boxed::Box;
 
-pub static mut ALLOCATED_MEMORY: Option<AllocatedMemory<u8>> = None;
+// TODO: Replace with once cell
+pub static mut ALLOCATED_MEMORY: Option<Box<[u8]>> = None;
 
 /// The physical address of the allocated page.
 pub static mut SHELLCODE_PA: Option<PhysicalAddress> = None;
@@ -14,7 +13,7 @@ pub static mut SHELLCODE_PA: Option<PhysicalAddress> = None;
 pub fn init() -> Option<()> {
     // Allocate the memory
     //
-    let memory = AllocatedMemory::<u8>::alloc(0x1000)?;
+    let mut memory = Box::new_uninit_slice(0x1000);
 
     // Write our shellcode to the page
     //
@@ -31,14 +30,20 @@ pub fn init() -> Option<()> {
 
     // Copy to page start
     //
-    unsafe { core::ptr::copy(shellcode.as_ptr(), memory.as_ptr(), shellcode.len()) };
+    unsafe {
+        core::ptr::copy(
+            shellcode.as_ptr(),
+            memory.as_mut_ptr() as _,
+            shellcode.len(),
+        )
+    };
 
     // Copy to page middle
     //
     unsafe {
         core::ptr::copy(
             shellcode.as_ptr(),
-            memory.as_ptr().add(0x500),
+            (memory.as_mut_ptr() as *mut u8).add(0x500),
             shellcode.len(),
         )
     };
@@ -47,7 +52,7 @@ pub fn init() -> Option<()> {
     //
     unsafe {
         SHELLCODE_PA = Some(PhysicalAddress::from_va(memory.as_ptr() as *mut u64 as u64));
-        ALLOCATED_MEMORY = Some(memory);
+        ALLOCATED_MEMORY = Some(memory.assume_init());
     }
 
     Some(())
@@ -79,22 +84,6 @@ pub fn print_shellcode() {
 }
 
 // ============================================================================
-
-pub static mut HOOK: Option<AllocatedMemory<FunctionHook>> = None;
-
-// pub fn setup_hook() {
-//     let hook = unsafe {
-//         InlineHook::new(
-//             ALLOCATED_MEMORY.as_ref().unwrap().as_ptr() as _,
-//             hook_handler as _,
-//         )
-//     }
-//     .unwrap();
-//
-//     hook.enable();
-//
-//     unsafe { HOOK = Some(hook) };
-// }
 
 pub fn hook_handler(a: u64) -> u64 {
     log::info!("hook handler called");

@@ -1,18 +1,18 @@
 use crate::{
     svm::{data::nested_page_table::NestedPageTable, paging::AccessType},
-    utils::{addresses::PhysicalAddress, memory::AllocatedMemory},
+    utils::addresses::PhysicalAddress,
     Hook, HookType,
 };
-use alloc::vec::Vec;
+use alloc::{boxed::Box, vec::Vec};
 
 pub struct DuplicateNptHook {
-    pub rwx_npt: AllocatedMemory<NestedPageTable>,
+    pub rwx_npt: Box<NestedPageTable>,
     pub rwx_pml4: PhysicalAddress,
 
     /// This is the nested page table, where the hooked pages are set to RWX and
     /// the original pages are set to RW. Because of this, we can detect
     /// when the hooked page has been left.
-    pub rw_npt: AllocatedMemory<NestedPageTable>,
+    pub rw_npt: Box<NestedPageTable>,
     pub rw_pml4: PhysicalAddress,
 
     pub hooks: Vec<Hook>,
@@ -39,22 +39,25 @@ impl DuplicateNptHook {
         Some(())
     }
 
-    pub fn new(hooks: Vec<Hook>) -> Option<AllocatedMemory<Self>> {
-        let mut hooked_npt = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
+    pub fn new(hooks: Vec<Hook>) -> Option<Box<Self>> {
+        let rwx_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
+        let rwx_pml4 = PhysicalAddress::from_va(rwx_npt.pml4.as_ptr() as u64);
 
-        hooked_npt.rwx_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute)?;
-        hooked_npt.rwx_pml4 = PhysicalAddress::from_va(hooked_npt.rwx_npt.pml4.as_ptr() as u64);
+        let rw_npt = NestedPageTable::identity_4kb(AccessType::ReadWrite);
+        let rw_pml4 = PhysicalAddress::from_va(rw_npt.pml4.as_ptr() as u64);
 
-        hooked_npt.rw_npt = NestedPageTable::identity_4kb(AccessType::ReadWrite)?;
-        hooked_npt.rw_pml4 = PhysicalAddress::from_va(hooked_npt.rw_npt.pml4.as_ptr() as u64);
+        let mut instance = Self {
+            rwx_npt,
+            rwx_pml4,
+            //
+            rw_npt,
+            rw_pml4,
+            //
+            hooks,
+        };
+        instance.enable_hooks()?;
 
-        hooked_npt.hooks = hooks;
-
-        // Enable the hooks
-        //
-        hooked_npt.enable_hooks()?;
-
-        Some(hooked_npt)
+        Some(Box::new(instance))
     }
 
     /// Tries to find a hook for the specified faulting physical address.
@@ -93,18 +96,16 @@ impl DuplicateNptHook {
 }
 
 pub struct RetAddrHook {
-    pub npt: AllocatedMemory<NestedPageTable>,
+    pub npt: Box<NestedPageTable>,
     pub hooks: Vec<Hook>,
 }
 
 impl RetAddrHook {
-    pub fn new(hooks: Vec<Hook>) -> Option<AllocatedMemory<Self>> {
-        let mut hooked_npt = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
-
-        hooked_npt.npt = NestedPageTable::identity_2mb(AccessType::ReadWriteExecute)?;
-        hooked_npt.hooks = hooks;
-
-        Some(hooked_npt)
+    pub fn new(hooks: Vec<Hook>) -> Option<Box<Self>> {
+        Some(Box::new(Self {
+            npt: NestedPageTable::identity_2mb(AccessType::ReadWriteExecute),
+            hooks,
+        }))
     }
 
     pub fn enable(&mut self) -> Option<()> {

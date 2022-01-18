@@ -9,11 +9,11 @@ use crate::{
     },
     utils::{
         addresses::physical_address,
-        memory::AllocatedMemory,
         nt::{Context, KTRAP_FRAME},
         ptr::Pointer,
     },
 };
+use alloc::boxed::Box;
 use core::{arch::asm, ptr::NonNull};
 use x86::{bits64::paging::BASE_PAGE_SIZE, msr::wrmsr};
 
@@ -62,10 +62,11 @@ const_assert_eq!(
 );
 
 impl ProcessorData {
-    pub fn new() -> Option<AllocatedMemory<Self>> {
-        AllocatedMemory::alloc_aligned(core::mem::size_of::<Self>())
+    pub fn new() -> Box<Self> {
+        unsafe { Box::new_zeroed().assume_init() }
     }
 
+    // TODO: A lot of this could already be done at startup
     pub fn prepare_for_virtualization(&mut self, shared_data: &mut SharedData, context: Context) {
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L982
 
@@ -77,7 +78,7 @@ impl ProcessorData {
         let pml4_pa = physical_address(
             shared_data.hooked_npt.as_mut().rwx_npt.pml4.as_ptr() as *const _ as _
         );
-        let msr_pm_pa = physical_address(shared_data.msr_bitmap.as_ptr() as *const _);
+        let msr_pm_pa = physical_address(shared_data.msr_bitmap.as_mut() as *mut _ as _);
 
         log::trace!("Physical addresses:");
         log::trace!("guest_vmcb_pa: {:x}", guest_vmcb_pa);

@@ -8,6 +8,8 @@
 #![feature(const_ptr_as_ref)]
 #![feature(const_trait_impl)]
 #![feature(alloc_error_handler)]
+#![feature(new_uninit)]
+#![feature(allocator_api)]
 #![allow(clippy::new_ret_no_self)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
@@ -20,14 +22,14 @@ use crate::{
     hook::{handlers, testing, Hook, HookType},
     svm::Processors,
     utils::{
+        logger::KernelLogger,
         nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
         physmem_descriptor::PhysicalMemoryDescriptor,
         ptr::Pointer,
     },
 };
 use alloc::{vec, vec::Vec};
-use log::{KernelLogger, LevelFilter};
-use utils::inline_hook::FunctionHook;
+use log::LevelFilter;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
     shared::{
@@ -59,7 +61,9 @@ fn init_hooks() -> Option<Vec<Hook>> {
     )?;
     unsafe {
         handlers::ZWQSI_ORIGINAL = match zwqsi_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
+            HookType::Function { ref inline_hook } => {
+                Pointer::new(inline_hook.trampoline_address() as _)
+            }
             HookType::Page => None,
         };
     }
@@ -79,25 +83,27 @@ fn init_hooks() -> Option<Vec<Hook>> {
 
     // // MmIsAddressValid
     // //
-    let mmiav_hook = Hook::hook_function(
-        "MmIsAddressValid",
-        handlers::mm_is_address_valid as *const (),
-    )?;
-    unsafe {
-        handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
-            HookType::Function { ref inline_hook } => Pointer::new(inline_hook.as_ptr()),
-            HookType::Page => unreachable!(),
-        };
-    }
-
-    let hook = Hook::hook_function_ptr(
-        unsafe { testing::SHELLCODE_PA.as_ref().unwrap().va() as u64 },
-        testing::hook_handler as *const (),
-    )?;
+    // let mmiav_hook = Hook::hook_function(
+    //     "MmIsAddressValid",
+    //     handlers::mm_is_address_valid as *const (),
+    // )?;
+    // unsafe {
+    //     handlers::MMIAV_ORIGINAL = match mmiav_hook.hook_type {
+    //         HookType::Function { ref inline_hook } =>
+    // Pointer::new(inline_hook.as_ptr()),         HookType::Page =>
+    // unreachable!(),     };
+    // }
+    //
+    // let hook = Hook::hook_function_ptr(
+    //     unsafe { testing::SHELLCODE_PA.as_ref().unwrap().va() as u64 },
+    //     testing::hook_handler as *const (),
+    // )?;
 
     // FIXME: Currently only 1 hook is supported
+    // TODO: Check if this is true
+    // TODO: Use once_cell for this
 
-    Some(vec![zwqsi_hook, mmiav_hook, hook])
+    Some(vec![zwqsi_hook])
 }
 
 fn virtualize_system() -> Option<()> {
@@ -137,7 +143,7 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     dbg_break!();
 
-    vm_test::check_all();
+    // vm_test::check_all();
     // unsafe { (*driver).DriverUnload = Some(driver_unload) };
     // return STATUS_SUCCESS;
 

@@ -1,7 +1,8 @@
 use crate::utils::{
-    memory::AllocatedMemory,
+    alloc::PhysicalAllocator,
     nt::{RtlClearAllBits, RtlInitializeBitMap, RtlSetBits, RTL_BITMAP},
 };
+use alloc::boxed::Box;
 use core::mem::MaybeUninit;
 use x86::bits64::paging::BASE_PAGE_SIZE;
 
@@ -56,12 +57,18 @@ impl MsrBitmap {
         }
     }
 
-    pub fn new() -> Option<AllocatedMemory<Self>> {
-        let bitmap = AllocatedMemory::<Self>::alloc_contiguous(BASE_PAGE_SIZE * 2)?;
+    pub fn new() -> Box<MsrBitmap, PhysicalAllocator> {
+        let instance = Self {
+            msr_bitmap_0: [0; 0x800],
+            msr_bitmap_1: [0; 0x800],
+            msr_bitmap_2: [0; 0x800],
+            msr_bitmap_3: [0; 0x800],
+        };
+        let mut instance = Box::<Self, PhysicalAllocator>::new_in(instance, PhysicalAllocator);
 
-        Self::initialize_bitmap(bitmap.as_ptr() as _);
+        Self::initialize_bitmap(instance.as_mut() as *mut _ as _);
 
-        Some(bitmap)
+        instance
     }
 
     pub fn hook_msr(&mut self, msr: u32) {

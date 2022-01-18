@@ -1,11 +1,8 @@
-use crate::utils::{
-    memory::AllocatedMemory,
-    nt::{
-        IoAllocateMdl, IoFreeMdl, KeInvalidateAllCaches, MmProbeAndLockPages, MmUnlockPages,
-        RtlCopyMemory, LOCK_OPERATION::IoReadAccess,
-    },
+use crate::utils::nt::{
+    IoAllocateMdl, IoFreeMdl, KeInvalidateAllCaches, MmProbeAndLockPages, MmUnlockPages,
+    RtlCopyMemory, LOCK_OPERATION::IoReadAccess,
 };
-use alloc::{vec, vec::Vec};
+use alloc::{boxed::Box, vec, vec::Vec};
 use iced_x86::{
     BlockEncoder, BlockEncoderOptions, Decoder, DecoderOptions, FlowControl, InstructionBlock,
 };
@@ -27,9 +24,6 @@ pub enum FunctionHookError {
     #[snafu(display("Failed to find original instructions"))]
     NoInstructions,
 
-    #[snafu(display("Failed to allocate memory for trampoline"))]
-    AllocationFailed,
-
     #[snafu(display("Failed to encode trampoline"))]
     EncodingFailed,
 
@@ -46,10 +40,8 @@ pub enum HookType {
 }
 
 pub struct FunctionHook {
-    trampoline: AllocatedMemory<u8>,
+    trampoline: Box<[u8]>,
 
-    /// Original address of the function (real page)
-    original_address: u64,
     /// Address where the inline hook has been written to (shadow page)
     hook_address: u64,
     handler: u64,
@@ -57,7 +49,6 @@ pub struct FunctionHook {
     mdl: PMDL,
 
     hook_type: HookType,
-    enabled: bool,
 }
 
 impl FunctionHook {
@@ -71,9 +62,7 @@ impl FunctionHook {
     ///
     /// Note: We have to allocate a new instance here, so that it's valid after
     /// the virtualization. Otherwise, all the addresses would be 0x0.
-    pub fn new(
-        original_address: u64, hook_address: u64, handler: *const (),
-    ) -> Option<AllocatedMemory<Self>> {
+    pub fn new(original_address: u64, hook_address: u64, handler: *const ()) -> Option<Self> {
         log::info!(
             "Creating a new inline hook. Address: {:x}, handler: {:x}",
             hook_address,
@@ -130,18 +119,12 @@ impl FunctionHook {
         }
         unsafe { MmProbeAndLockPages(mdl, KernelMode, IoReadAccess) };
 
-        Some({
-            let mut hook = AllocatedMemory::<Self>::alloc(core::mem::size_of::<Self>())?;
-
-            hook.trampoline = trampoline;
-            hook.hook_type = hook_type;
-            hook.enabled = false;
-            hook.hook_address = hook_address;
-            hook.original_address = original_address;
-            hook.mdl = mdl;
-            hook.handler = handler as u64;
-
-            hook
+        Some(Self {
+            trampoline,
+            hook_type,
+            hook_address,
+            mdl,
+            handler: handler as u64,
         })
     }
 
@@ -235,7 +218,7 @@ impl FunctionHook {
     /// The trampoline shellcode.
     fn trampoline_shellcode(
         original_address: u64, address: u64, required_size: usize,
-    ) -> Result<AllocatedMemory<u8>, FunctionHookError> {
+    ) -> Result<Box<[u8]>, FunctionHookError> {
         log::info!("Creating the trampoline for function: {:#x}", address);
 
         // Read bytes from function and decode them. Read 2 times the amount needed, in
@@ -293,11 +276,10 @@ impl FunctionHook {
 
         // Allocate new memory for the trampoline and encode the instructions.
         //
-        let memory = AllocatedMemory::<u8>::alloc_executable(total_bytes + JMP_SHELLCODE_LEN)
-            .ok_or(FunctionHookError::AllocationFailed)?;
+        let mut memory = Box::new_uninit_slice(total_bytes + JMP_SHELLCODE_LEN);
         log::info!("Allocated trampoline memory at {:p}", memory.as_ptr());
 
-        let block = InstructionBlock::new(&trampoline, memory.as_ptr() as _);
+        let block = InstructionBlock::new(&trampoline, memory.as_mut_ptr() as _);
         let mut encoded = BlockEncoder::encode(decoder.bitness(), block, BlockEncoderOptions::NONE)
             .map(|b| b.code_buffer)
             .map_err(|_| FunctionHookError::EncodingFailed)?;
@@ -314,9 +296,15 @@ impl FunctionHook {
 
         // Copy the encoded bytes and return the allocated memory.
         //
-        unsafe { core::ptr::copy_nonoverlapping(encoded.as_ptr(), memory.as_ptr(), encoded.len()) };
+        unsafe {
+            core::ptr::copy_nonoverlapping(
+                encoded.as_ptr(),
+                memory.as_mut_ptr() as _,
+                encoded.len(),
+            )
+        };
 
-        Ok(memory)
+        Ok(unsafe { memory.assume_init() })
     }
 
     pub const fn trampoline_address(&self) -> *mut u64 {

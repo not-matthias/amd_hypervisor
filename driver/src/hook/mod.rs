@@ -2,10 +2,10 @@ extern crate alloc;
 
 use crate::utils::{
     addresses::PhysicalAddress,
-    inline_hook::FunctionHook,
-    memory::AllocatedMemory,
+    function_hook::FunctionHook,
     nt::{irql::assert_paged_code, MmGetSystemRoutineAddress, RtlCopyMemory},
 };
+use alloc::boxed::Box;
 use windy::{UnicodeString, WStr};
 use x86::bits64::paging::{PAddr, VAddr, BASE_PAGE_SIZE};
 use x86_64::instructions::interrupts::without_interrupts;
@@ -16,9 +16,7 @@ pub mod testing;
 
 pub enum HookType {
     /// Creates a shadow page to hook a function.
-    Function {
-        inline_hook: AllocatedMemory<FunctionHook>,
-    },
+    Function { inline_hook: FunctionHook },
 
     /// Creates a shadow page to hide some data.
     Page,
@@ -34,7 +32,7 @@ pub struct Hook {
     pub hook_va: u64,
     pub hook_pa: PhysicalAddress,
 
-    pub page: AllocatedMemory<u8>,
+    pub page: Box<[u8]>,
     pub page_va: u64,
     pub page_pa: PhysicalAddress,
 
@@ -51,7 +49,7 @@ impl Hook {
     /// < DISPATCH_LEVEL.
     ///
     /// For more information, see the official docs:https://docs.microsoft.com/en-us/windows-hardware/drivers/kernel/when-should-code-and-data-be-pageable-
-    fn copy_page(address: u64) -> Option<AllocatedMemory<u8>> {
+    fn copy_page(address: u64) -> Option<Box<[u8]>> {
         log::info!("Creating a copy of the page");
 
         let page_address = PAddr::from(address).align_down_to_base_page();
@@ -59,7 +57,7 @@ impl Hook {
             log::error!("Invalid address: {:#x}", address);
             return None;
         }
-        let page = AllocatedMemory::<u8>::alloc(BASE_PAGE_SIZE)?;
+        let mut page = Box::new_uninit_slice(BASE_PAGE_SIZE);
 
         log::info!("Page address: {:#x}", page_address);
 
@@ -68,14 +66,14 @@ impl Hook {
         without_interrupts(|| {
             unsafe {
                 RtlCopyMemory(
-                    page.as_ptr() as _,
+                    page.as_mut_ptr() as _,
                     page_address.as_u64() as *mut u64,
                     BASE_PAGE_SIZE,
                 )
             };
         });
 
-        Some(page)
+        Some(unsafe { page.assume_init() })
     }
 
     /// Returns the address of the specified function in the copied page.
