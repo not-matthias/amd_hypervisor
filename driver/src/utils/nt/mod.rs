@@ -12,7 +12,7 @@ use winapi::{
         basetsd::SIZE_T,
         ntdef::{
             HANDLE, LARGE_INTEGER, NTSTATUS, OBJECT_ATTRIBUTES, PGROUP_AFFINITY, PHANDLE,
-            PHYSICAL_ADDRESS, PPROCESSOR_NUMBER, PVOID, ULONG,
+            PHYSICAL_ADDRESS, PPROCESSOR_NUMBER, PVOID, ULONG, UNICODE_STRING, WCHAR,
         },
     },
     um::winnt::PCONTEXT,
@@ -31,6 +31,8 @@ extern "system" {
 
 #[link(name = "ntoskrnl")]
 extern "system" {
+    pub fn RtlInitUnicodeString(DestinationString: *mut UNICODE_STRING, SourceString: *const WCHAR);
+
     pub fn ExAllocatePool(PoolType: POOL_TYPE, NumberOfBytes: SIZE_T) -> PVOID;
 
     pub fn ExFreePool(P: PVOID);
