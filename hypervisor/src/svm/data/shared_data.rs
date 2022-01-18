@@ -1,13 +1,12 @@
 extern crate alloc;
 
 use crate::{
-    hook::npt::DuplicateNptHook,
+    hook::{npt::DuplicateNptHook, Hook},
     svm::{
         data::msr_bitmap::MsrBitmap,
         msr::{SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
     },
     utils::alloc::PhysicalAllocator,
-    Hook,
 };
 use alloc::{boxed::Box, vec::Vec};
 use x86::msr::IA32_EFER;

@@ -1,5 +1,8 @@
-use crate::{dbg_break, KeBugCheck, MANUALLY_INITIATED_CRASH};
 use core::panic::PanicInfo;
+use hypervisor::{
+    debug::dbg_break,
+    utils::nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
+};
 
 #[no_mangle]
 #[allow(bad_style)]

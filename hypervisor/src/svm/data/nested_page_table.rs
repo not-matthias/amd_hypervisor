@@ -1,7 +1,6 @@
 use crate::{
     svm::paging::{AccessType, PFN_MASK, _2MB, _512GB},
-    utils::addresses::physical_address,
-    PhysicalMemoryDescriptor,
+    utils::{addresses::physical_address, physmem_descriptor::PhysicalMemoryDescriptor},
 };
 use alloc::boxed::Box;
 use elain::Align;

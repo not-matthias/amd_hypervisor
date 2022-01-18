@@ -1,4 +1,5 @@
 use crate::{
+    hook::HookType,
     svm::{
         data::{guest::GuestRegisters, processor_data::ProcessorData},
         events::EventInjection,
@@ -7,7 +8,6 @@ use crate::{
         vmexit::ExitType,
     },
     utils::addresses::PhysicalAddress,
-    HookType,
 };
 
 pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {

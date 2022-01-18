@@ -1,5 +1,5 @@
 use crate::{
-    dbg_break,
+    debug::dbg_break,
     svm::{
         data::{guest::GuestRegisters, processor_data::ProcessorData},
         events::EventInjection,

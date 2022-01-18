@@ -1,5 +1,5 @@
 use crate::utils::nt::MmIsAddressValid;
-use winapi::shared::ntdef::{NTSTATUS, PULONG, ULONG};
+use winapi::shared::ntdef::{NTSTATUS};
 
 pub type ZwQuerySystemInformationType = fn(u32, *mut u64, u32, *mut u64) -> NTSTATUS;
 pub static mut ZWQSI_ORIGINAL: Option<ZwQuerySystemInformationType> = None;

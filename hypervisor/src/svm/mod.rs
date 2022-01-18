@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::{
-    dbg_break,
+    debug::dbg_break,
     hook::Hook,
     support,
     support::is_virtualized,
@@ -12,10 +12,9 @@ use crate::{
         vmlaunch::launch_vm,
     },
     utils::{
-        nt::Context,
+        nt::{Context, KeBugCheck, MANUALLY_INITIATED_CRASH},
         processor::{processor_count, ProcessorExecutor},
     },
-    KeBugCheck, MANUALLY_INITIATED_CRASH,
 };
 use alloc::{boxed::Box, vec::Vec};
 use x86::{
@@ -66,14 +65,14 @@ impl Hypervisor {
     }
 
     pub fn with_handler(self, vmexit_type: VmExitType, handler: VmExitHandler) -> Self {
-        match vmexit_type {
+        let _ = match vmexit_type {
             VmExitType::Cpuid => vmexit::CPUID_HANDLER.set(box handler),
             VmExitType::Msr => vmexit::MSR_HANDLER.set(box handler),
             VmExitType::Vmrun => vmexit::VMRUN_HANDLER.set(box handler),
             VmExitType::Breakpoint => vmexit::BREAKPOINT_HANDLER.set(box handler),
             VmExitType::Npt => vmexit::NPT_HANDLER.set(box handler),
             VmExitType::Rdtsc => vmexit::RDTSC_HANDLER.set(box handler),
-        }
+        };
 
         self
     }

@@ -1,7 +1,7 @@
 use crate::{
+    hook::{Hook, HookType},
     svm::{data::nested_page_table::NestedPageTable, paging::AccessType},
     utils::addresses::PhysicalAddress,
-    Hook, HookType,
 };
 use alloc::{boxed::Box, vec::Vec};
 

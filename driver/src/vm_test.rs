@@ -3,7 +3,7 @@
 //! References:
 //! - https://github.com/LazyAhora/Hypervisor_detect_ring_0
 
-use crate::svm::msr::{EFER_SVME, SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA};
+use hypervisor::svm::msr::{EFER_SVME, SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA};
 use x86::{
     cpuid::cpuid,
     msr::{rdmsr, IA32_EFER},
