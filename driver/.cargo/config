@@ -1,3 +1,4 @@
+#cargo br --features mmap -Z build-std=panic_abort -Z build-std-features=panic_immediate_abort
 [build]
 target = "x86_64-pc-windows-msvc"
 rustflags = [

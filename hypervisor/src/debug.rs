@@ -1,4 +1,3 @@
-
 use core::arch::asm;
 
 /// Breaks if a kernel debugger is present on the system.

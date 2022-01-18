@@ -8,6 +8,7 @@
 
 extern crate alloc;
 
+use alloc::vec;
 use hypervisor::{
     debug::dbg_break,
     svm::Hypervisor,
@@ -49,18 +50,18 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
 
     unsafe { (*driver).DriverUnload = Some(driver_unload) };
 
-    // // Virtualize the system
-    // //
-    // let Some(mut hv) = Hypervisor::new(hooks) else {
-    //     log::info!("Failed to create processors");
-    //     return None;
-    // };
+    // Virtualize the system
     //
-    // if !hv.virtualize() {
-    //     log::error!("Failed to virtualize processors");
-    // }
-    //
-    // unsafe { HYPERVISOR = Some(hv) };
+    let Some(mut hv) = Hypervisor::new(vec![]) else {
+        log::info!("Failed to create processors");
+        return STATUS_UNSUCCESSFUL;
+    };
+
+    if !hv.virtualize() {
+        log::error!("Failed to virtualize processors");
+        return STATUS_UNSUCCESSFUL;
+    }
+    unsafe { HYPERVISOR = Some(hv) };
 
     vm_test::check_all();
 
