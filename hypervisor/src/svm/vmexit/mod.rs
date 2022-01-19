@@ -139,7 +139,9 @@ unsafe extern "stdcall" fn handle_vmexit(
 
     let exit_type = match data.guest_vmcb.control_area.exit_code {
         VmExitCode::VMEXIT_RDTSC => call_handler!(VmExitType::Rdtsc),
+        VmExitCode::VMEXIT_RDTSCP => call_handler!(VmExitType::Rdtscp),
         VmExitCode::VMEXIT_EXCEPTION_BP => call_handler!(VmExitType::Breakpoint),
+        VmExitCode::VMEXIT_VMMCALL => call_handler!(VmExitType::Vmcall),
         VmExitCode::VMEXIT_NPF => call_handler!(VmExitType::NestedPageFault, npt::handle_default),
         VmExitCode::VMEXIT_CPUID => call_handler!(
             VmExitType::Cpuid(guest_regs.rax as u32 /* leaf */),

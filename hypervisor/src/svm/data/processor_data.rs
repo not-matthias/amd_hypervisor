@@ -76,7 +76,7 @@ impl ProcessorData {
                 trap_frame: unsafe { core::mem::zeroed() },
                 guest_vmcb_pa: 0,
                 host_vmcb_pa: 0,
-                self_data: ptr::null_mut(), // TODO: Remove this
+                self_data: ptr::null_mut(), // We set this later.
                 shared_data: unsafe { NonNull::new_unchecked(shared_data as *mut _) },
                 padding_1: u64::MAX,
                 reserved_1: u64::MAX,
@@ -135,6 +135,9 @@ impl ProcessorData {
     }
 
     fn configure_interceptions(&mut self) {
+        // TODO: Allow custom exceptions to be hooked. This is tricky, because we can't
+        // map ExceptionVector to VmExitCode.
+
         if vmexit_installed!(VmExitType::Breakpoint) {
             log::info!("Intercepting breakpoint");
             self.guest_vmcb
@@ -157,6 +160,22 @@ impl ProcessorData {
                 .control_area
                 .intercept_misc1
                 .insert(InterceptMisc1::INTERCEPT_RDTSC);
+        }
+
+        if vmexit_installed!(VmExitType::Rdtscp) {
+            log::info!("Intercepting rdtscp");
+            self.guest_vmcb
+                .control_area
+                .intercept_misc2
+                .insert(InterceptMisc2::INTERCEPT_RDTSCP);
+        }
+
+        if vmexit_installed!(VmExitType::Vmcall) {
+            log::info!("Intercepting vmcall");
+            self.guest_vmcb
+                .control_area
+                .intercept_misc2
+                .insert(InterceptMisc2::INTERCEPT_VMCALL);
         }
 
         self.guest_vmcb

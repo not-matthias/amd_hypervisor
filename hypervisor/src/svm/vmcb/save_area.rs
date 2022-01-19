@@ -12,7 +12,6 @@ use x86_64::{
     registers::control::{Cr0, Cr4},
 };
 
-// Size: 0x298
 #[repr(C)]
 pub struct SaveArea {
     pub es_selector: u16,
@@ -131,6 +130,46 @@ impl SaveArea {
         limit
     }
 
+    pub fn new(context: Context) -> Self {
+        let gdt = sgdt();
+        let idt = sidt();
+
+        Self {
+            gdtr_base: gdt.base.as_u64(),
+            gdtr_limit: gdt.limit as _,
+
+            idtr_base: idt.base.as_u64(),
+            idtr_limit: idt.limit as _,
+
+            cs_limit: Self::segment_limit(context.seg_cs),
+            ds_limit: Self::segment_limit(context.seg_ds),
+            es_limit: Self::segment_limit(context.seg_es),
+            ss_limit: Self::segment_limit(context.seg_ss),
+
+            cs_selector: context.seg_cs,
+            ds_selector: context.seg_ds,
+            es_selector: context.seg_es,
+            ss_selector: context.seg_ss,
+
+            cs_attrib: Self::segment_access_right(context.seg_cs, gdt.base.as_u64()),
+            ds_attrib: Self::segment_access_right(context.seg_ds, gdt.base.as_u64()),
+            es_attrib: Self::segment_access_right(context.seg_es, gdt.base.as_u64()),
+            ss_attrib: Self::segment_access_right(context.seg_ss, gdt.base.as_u64()),
+
+            gpat: unsafe { rdmsr(IA32_PAT) },
+            efer: unsafe { rdmsr(IA32_EFER) },
+            cr0: Cr0::read_raw(),
+            cr2: unsafe { cr2() } as _,
+            cr3: unsafe { cr3() },
+            cr4: Cr4::read_raw(),
+            rflags: context.e_flags as u64,
+            rsp: context.rsp,
+            rip: context.rip,
+
+            ..Default::default()
+        }
+    }
+
     pub fn build(&mut self, context: Context) {
         // Like this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1053
 
@@ -174,5 +213,84 @@ impl SaveArea {
         self.rflags = context.e_flags as u64;
         self.rsp = context.rsp;
         self.rip = context.rip;
+    }
+}
+
+impl Default for SaveArea {
+    fn default() -> Self {
+        Self {
+            es_selector: 0,
+            es_attrib: 0,
+            es_limit: 0,
+            es_base: 0,
+            cs_selector: 0,
+            cs_attrib: 0,
+            cs_limit: 0,
+            cs_base: 0,
+            ss_selector: 0,
+            ss_attrib: 0,
+            ss_limit: 0,
+            ss_base: 0,
+            ds_selector: 0,
+            ds_attrib: 0,
+            ds_limit: 0,
+            ds_base: 0,
+            fs_selector: 0,
+            fs_attrib: 0,
+            fs_limit: 0,
+            fs_base: 0,
+            gs_selector: 0,
+            gs_attrib: 0,
+            gs_limit: 0,
+            gs_base: 0,
+            gdtr_selector: 0,
+            gdtr_attrib: 0,
+            gdtr_limit: 0,
+            gdtr_base: 0,
+            ldtr_selector: 0,
+            ldtr_attrib: 0,
+            ldtr_limit: 0,
+            ldtr_base: 0,
+            idtr_selector: 0,
+            idtr_attrib: 0,
+            idtr_limit: 0,
+            idtr_base: 0,
+            tr_selector: 0,
+            tr_attrib: 0,
+            tr_limit: 0,
+            tr_base: 0,
+            reserved1: [0u8; 43],
+            cpl: 0,
+            reserved2: 0,
+            efer: 0,
+            reserved3: [0u8; 112],
+            cr4: 0,
+            cr3: 0,
+            cr0: 0,
+            dr7: 0,
+            dr6: 0,
+            rflags: 0,
+            rip: 0,
+            reserved4: [0u8; 88],
+            rsp: 0,
+            reserved5: [0u8; 24],
+            rax: 0,
+            star: 0,
+            lstar: 0,
+            cstar: 0,
+            sf_mask: 0,
+            kernel_gs_base: 0,
+            sysenter_cs: 0,
+            sysenter_esp: 0,
+            sysenter_eip: 0,
+            cr2: 0,
+            reserved6: [0u8; 32],
+            gpat: 0,
+            dbg_ctl: 0,
+            br_from: 0,
+            br_to: 0,
+            last_excep_from: 0,
+            last_excep_to: 0,
+        }
     }
 }

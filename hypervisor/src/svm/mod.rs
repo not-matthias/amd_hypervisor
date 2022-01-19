@@ -37,13 +37,14 @@ pub enum VmExitType {
 
     /// Rdmsr/Wrmsr with msr = {0}
     Msr(u32),
-
     Rdmsr(u32),
     Wrmsr(u32),
 
-    Breakpoint,
     NestedPageFault,
+    Breakpoint,
     Rdtsc,
+    Rdtscp,
+    Vmcall,
 }
 
 pub struct Hypervisor {
