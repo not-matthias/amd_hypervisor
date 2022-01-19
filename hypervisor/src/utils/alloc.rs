@@ -48,8 +48,10 @@ unsafe impl Allocator for PhysicalAllocator {
 }
 
 /// Allocates non-paged virtual memory.
+#[cfg(feature = "allocator")]
 pub struct KernelAlloc;
 
+#[cfg(feature = "allocator")]
 unsafe impl GlobalAlloc for KernelAlloc {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let pool =
@@ -71,11 +73,7 @@ unsafe impl GlobalAlloc for KernelAlloc {
     }
 }
 
-#[cfg_attr(not(test), alloc_error_handler)]
-fn alloc_error(layout: Layout) -> ! {
-    #[cfg(not(feature = "no-assertions"))]
+#[cfg_attr(feature = "allocator", alloc_error_handler)]
+pub fn alloc_error(layout: Layout) -> ! {
     panic!("{:?} alloc memory error", layout);
-
-    #[cfg(feature = "no-assertions")]
-    panic!()
 }

@@ -7,7 +7,7 @@
 #![feature(const_trait_impl)]
 #![feature(new_uninit)]
 #![feature(box_syntax)]
-#![cfg_attr(feature = "allocator", feature(allocator_api))]
+#![feature(allocator_api)]
 #![cfg_attr(feature = "allocator", feature(alloc_error_handler))]
 #![feature(once_cell)]
 

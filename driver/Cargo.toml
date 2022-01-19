@@ -13,7 +13,7 @@ log = "0.4.14"
 x86 = "0.44.0"
 x86_64 = "0.14.7"
 
-hypervisor = { path = "../hypervisor" }
+hypervisor = { path = "../hypervisor", features = ["allocator"] }
 
 [build-dependencies]
 winreg = "0.10.1"
