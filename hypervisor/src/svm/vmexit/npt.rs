@@ -29,7 +29,7 @@ pub fn handle_break_point_exception(data: &mut ProcessorData, _: &mut GuestRegis
     {
         data.guest_vmcb.save_area.rip = handler;
 
-        ExitType::DoNothing
+        ExitType::Continue
     } else {
         EventInjection::bp().inject(data);
 
@@ -65,7 +65,7 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
             .rwx_npt
             .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
 
-        return ExitType::DoNothing;
+        return ExitType::Continue;
     }
 
     // Check if there exists a hook for the faulting page.
@@ -109,5 +109,5 @@ pub fn handle_nested_page_fault(data: &mut ProcessorData, _regs: &mut GuestRegis
         .vmcb_clean
         .remove(VmcbClean::NP);
 
-    ExitType::DoNothing
+    ExitType::Continue
 }

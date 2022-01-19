@@ -16,6 +16,5 @@ extern crate alloc;
 
 pub mod debug;
 pub mod hook;
-pub mod support;
 pub mod svm;
 pub mod utils;

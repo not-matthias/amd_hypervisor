@@ -6,6 +6,7 @@ use crate::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
             Vmcb,
         },
+        vmexit, VmExitType,
     },
     utils::{
         addresses::physical_address,
@@ -53,7 +54,7 @@ pub struct ProcessorData {
     pub host_stack_layout: HostStackLayout,
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
-    pub host_state_area: [u8; BASE_PAGE_SIZE],
+    pub(crate) host_state_area: [u8; BASE_PAGE_SIZE],
 }
 const_assert_eq!(
     core::mem::size_of::<ProcessorData>(),
@@ -88,35 +89,52 @@ impl ProcessorData {
         log::trace!("pml4_pa: {:x}", pml4_pa);
         log::trace!("msr_pm_pa: {:x}", msr_pm_pa);
 
-        // Intercept breakpoint exceptions. This is required for the npt hooks because
-        // we need to redirect the execution to our hook handlers. The breakpoint will
-        // be placed on the original instruction.
-        //
-        self.guest_vmcb
-            .control_area
-            .intercept_exception
-            .insert(ExceptionVector::BREAKPOINT);
-
-        // Configure which instructions to intercept
+        // Configure which instructions to intercept. Only intercept them if there's a
+        // handler installed, otherwise just do nothing.
         //
         log::info!("Configuring instructions to intercept");
-        self.guest_vmcb
-            .control_area
-            .intercept_misc1
-            .insert(InterceptMisc1::INTERCEPT_CPUID);
+
+        macro_rules! vmexit_installed {
+            ($vmexit_type:pat) => {
+                vmexit::VMEXIT_HANDLERS
+                    .read()
+                    .iter()
+                    .any(|(key, _)| matches!(key, $vmexit_type))
+            };
+        }
+
+        if vmexit_installed!(VmExitType::Breakpoint) {
+            log::info!("Intercepting breakpoint");
+            self.guest_vmcb
+                .control_area
+                .intercept_exception
+                .insert(ExceptionVector::BREAKPOINT);
+        }
+
+        if vmexit_installed!(VmExitType::Cpuid(_)) {
+            log::info!("Intercepting cpuid");
+            self.guest_vmcb
+                .control_area
+                .intercept_misc1
+                .insert(InterceptMisc1::INTERCEPT_CPUID);
+        }
+
+        if vmexit_installed!(VmExitType::Rdtsc) {
+            log::info!("Intercepting rdtsc");
+            self.guest_vmcb
+                .control_area
+                .intercept_misc1
+                .insert(InterceptMisc1::INTERCEPT_RDTSC);
+        }
 
         self.guest_vmcb
             .control_area
             .intercept_misc2
             .insert(InterceptMisc2::INTERCEPT_VMRUN);
 
-        self.guest_vmcb
-            .control_area
-            .intercept_misc1
-            .insert(InterceptMisc1::INTERCEPT_RDTSC);
-
         // Trigger #VMEXIT on MSR exit as defined in msr permission map.
         //
+        // TODO: Enable this by default?
         self.guest_vmcb
             .control_area
             .intercept_misc1
@@ -137,6 +155,8 @@ impl ProcessorData {
 
         // Enable nested page tables.
         //
+        // TODO: Nested page tables always or only when npt handler is set?
+
         log::info!("Configuring nested page tables");
         self.guest_vmcb
             .control_area

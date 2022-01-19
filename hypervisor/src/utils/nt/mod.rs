@@ -109,6 +109,8 @@ extern "system" {
     pub fn MmUnlockPages(MemoryDescriptorList: PMDL);
 
     pub fn MmGetSystemRoutineAddress(SystemRoutineName: *mut u64) -> *mut u64;
+
+    pub fn KeGetCurrentProcessorNumberEx(proc_num: *mut u64) -> u32;
 }
 
 // See: https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/bug-check-code-reference2#bug-check-codes

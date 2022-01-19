@@ -5,15 +5,13 @@ edition = "2021"
 
 [features]
 default = []
-no-assertions = []
-mmap = ["log/release_max_level_off", "no-assertions"]
+no-assertions = [] # TODO: Remove this
 
 [dependencies]
 log = "0.4.14"
 widestring = { version = "0.5.1", default-features = false, features = ["alloc"] }
 windy = { version = "0.2.0", default-features = false }
 snafu = { version = "0.7.0", default-features = false }
-once_cell = { version = "1.9.0", default-features = false, features = ["alloc", "unstable"] }
 tinyvec = "1.5.1"
 cfg-if = "1.0.0"
 elain = "0.3.0"
@@ -24,3 +22,8 @@ static_assertions = { version = "1.1.0", features = ["nightly"] }
 x86_64 = { version = "0.14.7", features = ["nightly", "const_fn"] }
 iced-x86 = { git = "https://github.com/icedland/iced", default-features = false, features = ["no_std", "decoder", "block_encoder", "instr_info", "no_d3now", "no_evex", "no_vex", "no_xop"] }
 winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", default-features = false, features = ["wdm", "ntstatus"] }
+
+lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
+spin = { version = "0.9.2", default-features = false, features = ["lock_api", "spin_mutex", "rwlock"] }
+hashbrown = { version = "0.12.0", default-features = false, features = ["nightly", "inline-more"] }
+fnv = { version = "1.0.7", default-features = false, features = [] }

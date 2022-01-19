@@ -1,10 +1,8 @@
 //! Checks whether the current system is able to run the hypervisor.
 
-use crate::svm::vmexit::cpuid::CPUID_IS_INSTALLED;
-use x86::{
-    cpuid::{cpuid, CpuId},
-    msr::rdmsr,
-};
+use crate::utils::processor::current_processor_index;
+use core::sync::atomic::{AtomicU64, Ordering};
+use x86::{cpuid::CpuId, msr::rdmsr};
 
 /// Checks whether svm is supported by the processor.
 ///
@@ -81,14 +79,22 @@ pub fn is_svm_supported() -> bool {
     false
 }
 
+/// The bitmap used to track which processor has been virtualized.
+static VIRTUALIZED_BITSET: AtomicU64 = AtomicU64::new(0);
+
 /// Checks whether the current process is already virtualized.
 ///
 /// This is done by comparing the value of cpuid leaf 0x40000000. The cpuid
 /// vmexit has to return the correct value to be able to use this.
 pub fn is_virtualized() -> bool {
-    let result = cpuid!(CPUID_IS_INSTALLED);
+    let bit = 1 << current_processor_index();
 
-    log::info!("Checking if processor is virtualized: {:x?}", result);
+    VIRTUALIZED_BITSET.load(Ordering::Relaxed) & bit != 0
+}
 
-    result.eax == 0x42 && result.ebx == 0x42 && result.ecx == 0x42 && result.edx == 0x42
+/// Marks the current processor as virtualized.
+pub fn set_virtualized() {
+    let bit = 1 << current_processor_index();
+
+    VIRTUALIZED_BITSET.fetch_or(bit, Ordering::Relaxed);
 }

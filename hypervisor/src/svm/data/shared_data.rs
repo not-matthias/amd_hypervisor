@@ -2,10 +2,7 @@ extern crate alloc;
 
 use crate::{
     hook::{npt::DuplicateNptHook, Hook},
-    svm::{
-        data::msr_bitmap::MsrBitmap,
-        msr::{SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
-    },
+    svm::data::msr_bitmap::MsrBitmap,
     utils::alloc::PhysicalAllocator,
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -24,11 +21,7 @@ impl SharedData {
         Some(Box::new(Self {
             msr_bitmap: {
                 let mut bitmap = MsrBitmap::new();
-
                 bitmap.hook_msr(IA32_EFER);
-                bitmap.hook_rdmsr(SVM_MSR_TSC);
-                bitmap.hook_rdmsr(SVM_MSR_VM_HSAVE_PA);
-
                 bitmap
             },
             hooked_npt: DuplicateNptHook::new(hooks)?,

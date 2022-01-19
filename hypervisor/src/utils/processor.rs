@@ -1,7 +1,7 @@
 //! Handles everything related to the physical processors.
 
 use crate::utils::nt::{
-    KeGetProcessorNumberFromIndex, KeQueryActiveProcessorCountEx,
+    KeGetCurrentProcessorNumberEx, KeGetProcessorNumberFromIndex, KeQueryActiveProcessorCountEx,
     KeRevertToUserGroupAffinityThread, KeSetSystemGroupAffinityThread, ZwYieldExecution,
 };
 use core::mem::MaybeUninit;
@@ -9,6 +9,10 @@ use winapi::shared::ntdef::{ALL_PROCESSOR_GROUPS, GROUP_AFFINITY, NT_SUCCESS, PR
 
 pub fn processor_count() -> u32 {
     unsafe { KeQueryActiveProcessorCountEx(ALL_PROCESSOR_GROUPS) }
+}
+
+pub fn current_processor_index() -> u32 {
+    unsafe { KeGetCurrentProcessorNumberEx(core::ptr::null_mut()) }
 }
 
 /// Returns the processor number for the specified index.

@@ -3,8 +3,6 @@ extern crate alloc;
 use crate::{
     debug::dbg_break,
     hook::Hook,
-    support,
-    support::is_virtualized,
     svm::{
         data::{processor_data::ProcessorData, shared_data::SharedData},
         msr::EFER_SVME,
@@ -26,14 +24,22 @@ pub mod data;
 pub mod events;
 pub mod msr;
 pub mod paging;
+pub mod support;
 pub mod vmcb;
 pub mod vmexit;
 pub mod vmlaunch;
 
+#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Debug, Copy, Clone)]
 pub enum VmExitType {
-    Cpuid,
-    Msr,
-    Vmrun,
+    /// Cpuid instruction with eax = {0}
+    Cpuid(u32),
+
+    /// Rdmsr/Wrmsr with msr = {0}
+    Msr(u32),
+
+    Rdmsr(u32),
+    Wrmsr(u32),
+
     Breakpoint,
     Npt,
     Rdtsc,
@@ -64,15 +70,31 @@ impl Hypervisor {
         })
     }
 
-    pub fn with_handler(self, vmexit_type: VmExitType, handler: VmExitHandler) -> Self {
-        let _ = match vmexit_type {
-            VmExitType::Cpuid => vmexit::CPUID_HANDLER.set(box handler),
-            VmExitType::Msr => vmexit::MSR_HANDLER.set(box handler),
-            VmExitType::Vmrun => vmexit::VMRUN_HANDLER.set(box handler),
-            VmExitType::Breakpoint => vmexit::BREAKPOINT_HANDLER.set(box handler),
-            VmExitType::Npt => vmexit::NPT_HANDLER.set(box handler),
-            VmExitType::Rdtsc => vmexit::RDTSC_HANDLER.set(box handler),
-        };
+    /// Adds the specified handler.
+    ///
+    /// Note: If a handler is already registered for the specified type, it will
+    /// be replaced.
+    #[must_use]
+    pub fn with_handler(mut self, vmexit_type: VmExitType, handler: VmExitHandler) -> Self {
+        // If it's an msr, we also have to set the permission in the bitmap.
+        //
+        match &vmexit_type {
+            VmExitType::Msr(msr) => self.shared_data.msr_bitmap.hook_msr(*msr),
+            VmExitType::Rdmsr(msr) => self.shared_data.msr_bitmap.hook_rdmsr(*msr),
+            VmExitType::Wrmsr(msr) => self.shared_data.msr_bitmap.hook_wrmsr(*msr),
+            _ => {}
+        }
+
+        if vmexit::VMEXIT_HANDLERS
+            .write()
+            .insert(vmexit_type, handler)
+            .is_some()
+        {
+            log::warn!(
+                "Handler for {:?} was overwritten. Is this on purpose?",
+                vmexit_type
+            );
+        }
 
         self
     }
@@ -171,8 +193,10 @@ impl Processor {
 
         // Check if already virtualized.
         //
-        if !is_virtualized() {
+        if !support::is_virtualized() {
             log::info!("Preparing for virtualization");
+
+            support::set_virtualized();
 
             // Enable SVM by setting EFER.SVME.
             let msr = unsafe { rdmsr(IA32_EFER) } | EFER_SVME;
@@ -204,7 +228,7 @@ impl Processor {
     pub fn devirtualize(&self) -> bool {
         // Already devirtualized? Then we don't need to do anything.
         //
-        let result = cpuid!(CPUID_DEVIRTUALIZE, CPUID_DEVIRTUALIZE);
+        let result = cpuid!(CPUID_DEVIRTUALIZE);
         if result.ecx != 0xDEADBEEF {
             log::info!(
                 "Ecx is not 0xDEADBEEF. Nothing to do. Ecx: {:x}",

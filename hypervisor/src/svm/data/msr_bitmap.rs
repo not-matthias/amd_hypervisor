@@ -72,11 +72,15 @@ impl MsrBitmap {
     }
 
     pub fn hook_msr(&mut self, msr: u32) {
+        log::info!("Hooking msr: {:x}", msr);
+
         self.hook_wrmsr(msr);
         self.hook_rdmsr(msr);
     }
 
     pub fn hook_rdmsr(&mut self, msr: u32) {
+        log::info!("Hooking rdmsr: {:x}", msr);
+
         let offset = Self::msr_range(msr) + Self::msr_offset(msr);
 
         let mut bitmap_header = Self::bitmap_header(self as *mut _ as _);
@@ -84,6 +88,8 @@ impl MsrBitmap {
     }
 
     pub fn hook_wrmsr(&mut self, msr: u32) {
+        log::info!("Hooking wrmsr: {:x}", msr);
+
         let offset = Self::msr_range(msr) + Self::msr_offset(msr);
 
         let mut bitmap_header = Self::bitmap_header(self as *mut _ as _);

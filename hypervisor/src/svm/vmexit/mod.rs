@@ -2,15 +2,11 @@ use crate::{
     debug::dbg_break,
     svm::{
         data::{guest::GuestRegisters, processor_data::ProcessorData},
+        events::EventInjection,
         msr::EFER_SVME,
         vmcb::control_area::VmExitCode,
-        vmexit::{
-            cpuid::handle_cpuid,
-            msr::handle_msr,
-            page_fault::{handle_break_point_exception, handle_nested_page_fault},
-            rdtsc::handle_rdtsc,
-            vmrun::handle_vmrun,
-        },
+        vmexit::{cpuid::CPUID_DEVIRTUALIZE, npt::handle_nested_page_fault},
+        VmExitType,
     },
     utils::{
         addresses::physical_address,
@@ -18,29 +14,40 @@ use crate::{
     },
 };
 use core::{arch::asm, ptr::NonNull};
-use once_cell::race::OnceBox;
+use fnv::FnvBuildHasher;
+use hashbrown::HashMap;
+use lazy_static::lazy_static;
+use spin::RwLock;
 use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 
 pub mod cpuid;
 pub mod msr;
-pub mod page_fault;
-pub mod rdtsc;
-pub mod vmrun;
+pub mod npt;
 
 pub type VmExitHandler = fn(&mut ProcessorData, &mut GuestRegisters) -> ExitType;
 
-pub(crate) static CPUID_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
-pub(crate) static MSR_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
-pub(crate) static VMRUN_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
-pub(crate) static BREAKPOINT_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
-pub(crate) static NPT_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
-pub(crate) static RDTSC_HANDLER: OnceBox<VmExitHandler> = OnceBox::new();
+lazy_static! {
+    pub static ref VMEXIT_HANDLERS: RwLock<HashMap<VmExitType, VmExitHandler, FnvBuildHasher>> = {
+        let map = RwLock::new(HashMap::with_hasher(FnvBuildHasher::default()));
+
+        // Default implementations
+        //
+        macro add_handler($vmexit_type: expr, $handler: expr) {
+            let _ = map.write().insert($vmexit_type, $handler as VmExitHandler);
+        }
+
+        add_handler!(VmExitType::Msr(IA32_EFER), msr::handle_efer);
+        add_handler!(VmExitType::Cpuid(CPUID_DEVIRTUALIZE), cpuid::handle_devirtualize);
+
+        map
+    };
+}
 
 #[derive(PartialOrd, PartialEq)]
 pub enum ExitType {
     ExitHypervisor,
     IncrementRIP,
-    DoNothing,
+    Continue,
 }
 
 unsafe fn exit_hypervisor(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) {
@@ -91,8 +98,6 @@ unsafe extern "stdcall" fn handle_vmexit(
     // Load host state that is not loaded on #VMEXIT.
     //
     asm!("vmload rax", in("rax") data.host_stack_layout.host_vmcb_pa);
-
-    #[cfg(not(feature = "no-assertions"))]
     assert_eq!(data.host_stack_layout.reserved_1, u64::MAX);
 
     // Guest's RAX is overwritten by the host's value on #VMEXIT and saved in
@@ -107,13 +112,51 @@ unsafe extern "stdcall" fn handle_vmexit(
 
     // Handle #VMEXIT
     //
+    macro call_handler($handler:expr) {
+        if let Some(handler) = VMEXIT_HANDLERS.read().get(&$handler) {
+            handler(data, guest_regs)
+        } else {
+            unreachable!()
+        }
+    }
+
+    macro call_handler_with_default($handler:expr, $default:expr) {
+        if let Some(handler) = VMEXIT_HANDLERS.read().get(&$handler) {
+            handler(data, guest_regs)
+        } else {
+            $default(data, guest_regs)
+        }
+    }
+
     let exit_type = match data.guest_vmcb.control_area.exit_code {
-        VmExitCode::VMEXIT_CPUID => handle_cpuid(data, guest_regs),
-        VmExitCode::VMEXIT_MSR => handle_msr(data, guest_regs),
-        VmExitCode::VMEXIT_VMRUN => handle_vmrun(data, guest_regs),
-        VmExitCode::VMEXIT_EXCEPTION_BP => handle_break_point_exception(data, guest_regs),
+        VmExitCode::VMEXIT_RDTSC => call_handler!(VmExitType::Rdtsc),
+        VmExitCode::VMEXIT_EXCEPTION_BP => call_handler!(VmExitType::Breakpoint),
         VmExitCode::VMEXIT_NPF => handle_nested_page_fault(data, guest_regs),
-        VmExitCode::VMEXIT_RDTSC => handle_rdtsc(data, guest_regs),
+        // VmExitCode::VMEXIT_NPF => call_handler!(VmExitType::Npt),
+        VmExitCode::VMEXIT_CPUID => {
+            call_handler_with_default!(
+                VmExitType::Cpuid(guest_regs.rax as u32 /* leaf */),
+                cpuid::handle_default
+            )
+        }
+        VmExitCode::VMEXIT_MSR => {
+            let msr = guest_regs.rcx as u32;
+
+            let map = VMEXIT_HANDLERS.read();
+            if let Some(handler) = map.get(&VmExitType::Msr(msr)) {
+                handler(data, guest_regs)
+            } else if let Some(handler) = map.get(&VmExitType::Rdmsr(msr)) {
+                handler(data, guest_regs)
+            } else if let Some(handler) = map.get(&VmExitType::Wrmsr(msr)) {
+                handler(data, guest_regs)
+            } else {
+                msr::handle_default(data, guest_regs)
+            }
+        }
+        VmExitCode::VMEXIT_VMRUN => {
+            EventInjection::gp().inject(data);
+            ExitType::Continue
+        }
         _ => {
             // Invalid #VMEXIT. This should never happen.
             //
@@ -136,7 +179,7 @@ unsafe extern "stdcall" fn handle_vmexit(
             data.guest_vmcb.save_area.rax = guest_regs.rax;
             data.guest_vmcb.save_area.rip = data.guest_vmcb.control_area.nrip;
         }
-        ExitType::DoNothing => {}
+        ExitType::Continue => {}
     }
 
     (exit_type == ExitType::ExitHypervisor) as u8

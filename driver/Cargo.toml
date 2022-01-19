@@ -7,12 +7,13 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-hypervisor = { path = "../hypervisor" }
 winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", default-features = false, features = ["wdm", "ntstatus"] }
 
 log = "0.4.14"
 x86 = "0.44.0"
 x86_64 = "0.14.7"
+
+hypervisor = { path = "../hypervisor" }
 
 [build-dependencies]
 winreg = "0.10.1"
