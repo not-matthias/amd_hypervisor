@@ -20,8 +20,9 @@ use hypervisor::{
         msr::{SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
         Hypervisor, VmExitType,
     },
-    utils::{alloc::KernelAlloc, logger::KernelLogger},
+    utils::alloc::KernelAlloc,
 };
+use kernel_log::KernelLogger;
 use log::LevelFilter;
 use winapi::{
     km::wdm::DRIVER_OBJECT,
@@ -38,7 +39,6 @@ pub mod vm_test;
 
 #[global_allocator]
 static GLOBAL: KernelAlloc = KernelAlloc;
-static LOGGER: KernelLogger = KernelLogger;
 
 static mut HYPERVISOR: Option<Hypervisor> = None;
 
@@ -72,7 +72,7 @@ fn virtualize() -> Option<()> {
 
 #[no_mangle]
 pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> NTSTATUS {
-    let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(LevelFilter::Info));
+    KernelLogger::init(LevelFilter::Info).unwrap();
 
     log::info!("Hello from amd_hypervisor!");
 
