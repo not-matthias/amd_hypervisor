@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 default = []
 no-assertions = [] # TODO: Remove this
+allocator = []
 
 [dependencies]
 log = "0.4.14"

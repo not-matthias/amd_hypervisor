@@ -6,9 +6,9 @@
 #![feature(const_ptr_as_ref)]
 #![feature(const_trait_impl)]
 #![feature(new_uninit)]
-#![feature(allocator_api)]
 #![feature(box_syntax)]
-#![feature(alloc_error_handler)]
+#![cfg_attr(feature = "allocator", feature(allocator_api))]
+#![cfg_attr(feature = "allocator", feature(alloc_error_handler))]
 #![feature(once_cell)]
 
 extern crate alloc;
