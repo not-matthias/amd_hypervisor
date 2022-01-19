@@ -15,6 +15,7 @@ use crate::{
     },
 };
 use alloc::{boxed::Box, vec::Vec};
+use core::lazy::OnceCell;
 use x86::{
     cpuid::cpuid,
     msr::{rdmsr, wrmsr, IA32_EFER},
@@ -158,7 +159,7 @@ pub struct Processor {
     /// The index of the processor.
     index: u32,
 
-    processor_data: Box<ProcessorData>,
+    processor_data: OnceCell<Box<ProcessorData>>,
 }
 
 impl Processor {
@@ -167,7 +168,7 @@ impl Processor {
 
         Some(Self {
             index,
-            processor_data: ProcessorData::new(),
+            processor_data: OnceCell::new(),
         })
     }
 
@@ -202,18 +203,18 @@ impl Processor {
             let msr = unsafe { rdmsr(IA32_EFER) } | EFER_SVME;
             unsafe { wrmsr(IA32_EFER, msr) };
 
-            // Setup vmcb
+            // Setup processor data and get host rsp.
             //
-            self.processor_data
-                .prepare_for_virtualization(shared_data, context);
+            let host_rsp = &self
+                .processor_data
+                .get_or_init(|| ProcessorData::new(shared_data, context))
+                .host_stack_layout
+                .guest_vmcb_pa as *const u64 as *mut u64;
 
             // Launch vm
             // https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/x64.asm#L78
             //
             log::info!("Launching vm");
-
-            let host_rsp =
-                &mut self.processor_data.as_mut().host_stack_layout.guest_vmcb_pa as *mut u64;
             unsafe { launch_vm(host_rsp) };
 
             // We should never continue the guest execution here.

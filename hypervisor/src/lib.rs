@@ -9,6 +9,7 @@
 #![feature(allocator_api)]
 #![feature(box_syntax)]
 #![feature(alloc_error_handler)]
+#![feature(once_cell)]
 
 extern crate alloc;
 

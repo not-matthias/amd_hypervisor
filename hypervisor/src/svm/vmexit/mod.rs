@@ -43,6 +43,13 @@ lazy_static! {
     };
 }
 
+pub macro vmexit_installed($vmexit_type:pat) {
+    $crate::svm::vmexit::VMEXIT_HANDLERS
+        .read()
+        .iter()
+        .any(|(key, _)| matches!(key, $vmexit_type))
+}
+
 #[derive(PartialOrd, PartialEq)]
 pub enum ExitType {
     ExitHypervisor,
