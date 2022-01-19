@@ -3,11 +3,6 @@ name = "hypervisor"
 version = "0.1.0"
 edition = "2021"
 
-[features]
-default = []
-no-assertions = [] # TODO: Remove this
-allocator = []
-
 [dependencies]
 log = "0.4.14"
 widestring = { version = "0.5.1", default-features = false, features = ["alloc"] }

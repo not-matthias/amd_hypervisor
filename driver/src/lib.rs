@@ -20,8 +20,8 @@ use hypervisor::{
         msr::{SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
         Hypervisor, VmExitType,
     },
-    utils::alloc::KernelAlloc,
 };
+use kernel_alloc::KernelAlloc;
 use kernel_log::KernelLogger;
 use log::LevelFilter;
 use winapi::{

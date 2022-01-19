@@ -9,12 +9,16 @@ crate-type = ["cdylib"]
 [dependencies]
 winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", default-features = false, features = ["wdm", "ntstatus"] }
 
+kernel-log = "0.1.1"
+kernel-alloc = { version = "0.1.2", features = ["pool-tag"] }
+
 log = "0.4.14"
 x86 = "0.44.0"
 x86_64 = "0.14.7"
 
-kernel-log = { git = "https://github.com/not-matthias/kernel-log-rs" }
-hypervisor = { path = "../hypervisor", features = ["allocator"] }
+hypervisor = { path = "../hypervisor" }
+
+
 
 [build-dependencies]
 winreg = "0.10.1"
