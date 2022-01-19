@@ -1,5 +1,5 @@
 pub mod bp;
 pub mod cpuid;
 pub mod msr;
-pub mod npt;
+pub mod npf;
 pub mod rdtsc;

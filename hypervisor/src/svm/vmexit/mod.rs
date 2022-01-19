@@ -5,7 +5,7 @@ use crate::{
         events::EventInjection,
         msr::EFER_SVME,
         vmcb::control_area::VmExitCode,
-        vmexit::{cpuid::CPUID_DEVIRTUALIZE, npt::handle_nested_page_fault},
+        vmexit::cpuid::CPUID_DEVIRTUALIZE,
         VmExitType,
     },
     utils::{
@@ -112,33 +112,32 @@ unsafe extern "stdcall" fn handle_vmexit(
 
     // Handle #VMEXIT
     //
-    macro call_handler($handler:expr) {
-        if let Some(handler) = VMEXIT_HANDLERS.read().get(&$handler) {
-            handler(data, guest_regs)
-        } else {
-            unreachable!()
-        }
-    }
+    macro_rules! call_handler {
+        ($handler:expr) => {
+            if let Some(handler) = VMEXIT_HANDLERS.read().get(&$handler) {
+                handler(data, guest_regs)
+            } else {
+                unreachable!()
+            }
+        };
 
-    macro call_handler_with_default($handler:expr, $default:expr) {
-        if let Some(handler) = VMEXIT_HANDLERS.read().get(&$handler) {
-            handler(data, guest_regs)
-        } else {
-            $default(data, guest_regs)
-        }
+        ($handler:expr, $default:expr) => {
+            if let Some(handler) = VMEXIT_HANDLERS.read().get(&$handler) {
+                handler(data, guest_regs)
+            } else {
+                $default(data, guest_regs)
+            }
+        };
     }
 
     let exit_type = match data.guest_vmcb.control_area.exit_code {
         VmExitCode::VMEXIT_RDTSC => call_handler!(VmExitType::Rdtsc),
         VmExitCode::VMEXIT_EXCEPTION_BP => call_handler!(VmExitType::Breakpoint),
-        VmExitCode::VMEXIT_NPF => handle_nested_page_fault(data, guest_regs),
-        // VmExitCode::VMEXIT_NPF => call_handler!(VmExitType::Npt),
-        VmExitCode::VMEXIT_CPUID => {
-            call_handler_with_default!(
-                VmExitType::Cpuid(guest_regs.rax as u32 /* leaf */),
-                cpuid::handle_default
-            )
-        }
+        VmExitCode::VMEXIT_NPF => call_handler!(VmExitType::NestedPageFault, npt::handle_default),
+        VmExitCode::VMEXIT_CPUID => call_handler!(
+            VmExitType::Cpuid(guest_regs.rax as u32 /* leaf */),
+            cpuid::handle_default
+        ),
         VmExitCode::VMEXIT_MSR => {
             let msr = guest_regs.rcx as u32;
 

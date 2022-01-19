@@ -246,13 +246,13 @@ impl NestedPageTable {
     //
     //
 
-    pub(crate) fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+    pub fn map_2mb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         self.map_pml4(guest_pa, access_type);
         self.map_pdpt(guest_pa, access_type);
         self.map_pde(guest_pa, host_pa, access_type);
     }
 
-    pub(crate) fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+    pub fn map_4kb(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         self.map_pml4(guest_pa, access_type);
         self.map_pdpt(guest_pa, access_type);
         self.map_pdt(guest_pa, access_type);

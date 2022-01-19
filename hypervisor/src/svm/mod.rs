@@ -41,7 +41,7 @@ pub enum VmExitType {
     Wrmsr(u32),
 
     Breakpoint,
-    Npt,
+    NestedPageFault,
     Rdtsc,
 }
 

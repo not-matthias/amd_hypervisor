@@ -15,7 +15,7 @@ use crate::{
 };
 use alloc::boxed::Box;
 use core::{arch::asm, ptr::NonNull};
-use x86::{bits64::paging::BASE_PAGE_SIZE, msr::wrmsr};
+use x86::{bits64::paging::BASE_PAGE_SIZE, controlregs::cr3, msr::wrmsr};
 
 pub const KERNEL_STACK_SIZE: usize = 0x6000;
 pub const STACK_CONTENTS_SIZE: usize = KERNEL_STACK_SIZE
@@ -153,18 +153,20 @@ impl ProcessorData {
         //
         self.guest_vmcb.control_area.guest_asid = 1;
 
-        // Enable nested page tables.
+        // Enable nested page tables (only when we also specify a page fault handler).
         //
-        // TODO: Nested page tables always or only when npt handler is set?
+        if vmexit_installed!(VmExitType::NestedPageFault) {
+            log::info!("Configuring nested page tables");
+            self.guest_vmcb
+                .control_area
+                .np_enable
+                .insert(NpEnable::NESTED_PAGING);
 
-        log::info!("Configuring nested page tables");
-        self.guest_vmcb
-            .control_area
-            .np_enable
-            .insert(NpEnable::NESTED_PAGING);
-
-        self.guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
-        log::info!("Pml4 pa: {:x}", pml4_pa.as_u64());
+            self.guest_vmcb.control_area.ncr3 = pml4_pa.as_u64();
+            log::info!("Pml4 pa: {:x}", pml4_pa.as_u64());
+        } else {
+            self.guest_vmcb.control_area.ncr3 = unsafe { cr3() };
+        }
 
         // Setup guest state based on current system state.
         //

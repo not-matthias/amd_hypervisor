@@ -10,7 +10,7 @@ extern crate alloc;
 
 use crate::{
     cpuid::{CPUID_FEATURES, CPUID_HV_VENDOR},
-    handlers::{cpuid, msr, rdtsc},
+    handlers::{bp, cpuid, msr, npf, rdtsc},
 };
 use alloc::vec;
 use hypervisor::{
@@ -55,7 +55,9 @@ fn virtualize() -> Option<()> {
         .with_handler(VmExitType::Rdmsr(SVM_MSR_TSC), msr::handle_rdtsc)
         .with_handler(VmExitType::Rdmsr(SVM_MSR_VM_HSAVE_PA), msr::handle_hsave)
         .with_handler(VmExitType::Cpuid(CPUID_FEATURES), cpuid::handle_features)
-        .with_handler(VmExitType::Cpuid(CPUID_HV_VENDOR), cpuid::handle_hv_vendor);
+        .with_handler(VmExitType::Cpuid(CPUID_HV_VENDOR), cpuid::handle_hv_vendor)
+        .with_handler(VmExitType::Breakpoint, bp::handle_bp_exception)
+        .with_handler(VmExitType::NestedPageFault, npf::handle_npf);
 
     if !hv.virtualize() {
         log::error!("Failed to virtualize processors");
