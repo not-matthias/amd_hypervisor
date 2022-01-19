@@ -3,6 +3,7 @@
 #![feature(let_else)]
 #![feature(decl_macro)]
 #![feature(box_syntax)]
+#![feature(new_uninit)]
 #![allow(clippy::new_ret_no_self)]
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
 
@@ -31,6 +32,7 @@ use winapi::{
 };
 
 pub mod handlers;
+pub mod hook;
 pub mod lang;
 pub mod vm_test;
 

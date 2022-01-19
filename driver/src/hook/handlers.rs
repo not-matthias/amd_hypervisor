@@ -1,4 +1,4 @@
-use crate::utils::nt::MmIsAddressValid;
+use hypervisor::utils::nt::MmIsAddressValid;
 use winapi::shared::ntdef::NTSTATUS;
 
 pub type ZwQuerySystemInformationType = fn(u32, *mut u64, u32, *mut u64) -> NTSTATUS;

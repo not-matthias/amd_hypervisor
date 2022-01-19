@@ -1,8 +1,8 @@
 //! This modules contains some code to be able to test the hooking system
 //! easier.
 
-use crate::utils::addresses::PhysicalAddress;
 use alloc::boxed::Box;
+use hypervisor::utils::addresses::PhysicalAddress;
 
 // TODO: Replace with once cell
 pub static mut ALLOCATED_MEMORY: Option<Box<[u8]>> = None;

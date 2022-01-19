@@ -10,9 +10,7 @@ use windy::{UnicodeString, WStr};
 use x86::bits64::paging::{PAddr, VAddr, BASE_PAGE_SIZE};
 use x86_64::instructions::interrupts::without_interrupts;
 
-pub mod handlers;
 pub mod npt;
-pub mod testing;
 
 pub enum HookType {
     /// Creates a shadow page to hook a function.
