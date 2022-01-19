@@ -59,8 +59,7 @@ impl NestedPageTable {
     pub fn identity() -> Box<Self> {
         log::info!("Building nested page tables");
 
-        let npt: NestedPageTable = unsafe { core::mem::zeroed() };
-        let mut npt = Box::new(npt);
+        let mut npt = Box::<Self>::new(Default::default());
 
         // PML4
         //
@@ -126,8 +125,7 @@ impl NestedPageTable {
     pub fn identity_2mb(access_type: AccessType) -> Box<Self> {
         log::info!("Building nested page tables with 2MB pages");
 
-        let npt = Box::<Self>::new_zeroed();
-        let mut npt = unsafe { npt.assume_init() };
+        let mut npt = Box::<Self>::new(Default::default());
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(_2MB) {
@@ -140,8 +138,7 @@ impl NestedPageTable {
     pub fn identity_4kb(access_type: AccessType) -> Box<NestedPageTable> {
         log::info!("Building nested page tables with 4KB pages");
 
-        // TODO: Fix
-        let mut npt = unsafe { Box::<Self>::new_zeroed().assume_init() };
+        let mut npt = Box::<Self>::new(Default::default());
 
         log::info!("Mapping 512GB of physical memory");
         for pa in (0.._512GB).step_by(BASE_PAGE_SIZE) {
@@ -155,9 +152,9 @@ impl NestedPageTable {
     /// address space.
     #[deprecated(note = "This doesn't work at the current time. Use `identity` instead.")]
     pub fn system(access_type: AccessType) -> Box<NestedPageTable> {
-        let desc = PhysicalMemoryDescriptor::new();
-        let mut npt = unsafe { Box::<Self>::new_zeroed().assume_init() };
+        let mut npt = Box::<Self>::new(Default::default());
 
+        let desc = PhysicalMemoryDescriptor::new();
         for pa in (0..desc.total_size()).step_by(_2MB) {
             npt.map_2mb(pa as u64, pa as u64, access_type);
         }
@@ -400,5 +397,19 @@ impl NestedPageTable {
 
     pub fn last_pdp_index(&self) -> usize {
         PhysicalMemoryDescriptor::new().total_size_in_gb() + 1
+    }
+}
+
+impl Default for NestedPageTable {
+    fn default() -> Self {
+        Self {
+            pml4: [PML4Entry(0); 512],
+            align_0: Default::default(),
+            pdp_entries: [PDPTEntry(0); 512],
+            align_1: Default::default(),
+            pd_entries: [[PDEntry(0); 512]; 512],
+            align_2: Default::default(),
+            pt_entries: [[[PTEntry(0); 512]; 512]; 512],
+        }
     }
 }
