@@ -29,6 +29,17 @@ pub fn check_all() {
     log::info!("check_aperf: {:?}", check_aperf());
     log::info!("check_hsave_msr: {:?}", check_hsave_msr());
     log::info!("check_efer_msr: {:?}", check_efer_msr());
+
+    // 0x40000001 = IA32_MISC_ENABLE
+    let value = unsafe { rdmsr(0x40000001) };
+    log::info!("check_misc_enable: {:x?}", value);
+
+    // 0x1B = IA32_APIC_BASE
+    let value = unsafe { rdmsr(0x1B) };
+    log::info!("apic base: {:x?}", value);
+
+    // 0x122 = IA32_SMM_MONITOR_CTL
+    let value = unsafe { rdmsr(0x122) };
 }
 
 pub fn check_reserved_cpuid() -> HvStatus {
