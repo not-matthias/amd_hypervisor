@@ -8,7 +8,6 @@
 #![feature(new_uninit)]
 #![feature(box_syntax)]
 #![feature(allocator_api)]
-#![cfg_attr(feature = "allocator", feature(alloc_error_handler))]
 #![feature(once_cell)]
 
 extern crate alloc;
