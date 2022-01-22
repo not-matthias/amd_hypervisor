@@ -3,6 +3,10 @@ name = "hypervisor"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+default = []
+secondary-npt = [] # If this feature is enabled, two nested page tables will be created.
+
 [dependencies]
 log = "0.4.14"
 widestring = { version = "0.5.1", default-features = false, features = ["alloc"] }

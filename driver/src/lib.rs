@@ -16,6 +16,7 @@ use crate::{
 use alloc::vec;
 use hypervisor::{
     debug::dbg_break,
+    hook::HookManager,
     svm::{
         msr::{SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
         Hypervisor, VmExitType,
@@ -40,11 +41,11 @@ pub mod vm_test;
 #[global_allocator]
 static GLOBAL: KernelAlloc = KernelAlloc;
 
+static mut HOOK_MANAGER: Option<HookManager> = None;
 static mut HYPERVISOR: Option<Hypervisor> = None;
 
 pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     if let Some(mut hv) = unsafe { HYPERVISOR.take() } {
-        // This won't do anything.
         hv.devirtualize();
 
         core::mem::drop(hv);
@@ -52,7 +53,7 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 }
 
 fn virtualize() -> Option<()> {
-    let mut hv = Hypervisor::new(vec![])?
+    let mut hv = Hypervisor::new()?
         .with_handler(VmExitType::Rdtsc, rdtsc::handle_rdtsc)
         .with_handler(VmExitType::Rdmsr(SVM_MSR_TSC), msr::handle_rdtsc)
         .with_handler(VmExitType::Rdmsr(SVM_MSR_VM_HSAVE_PA), msr::handle_hsave)
@@ -66,6 +67,10 @@ fn virtualize() -> Option<()> {
         return None;
     }
     unsafe { HYPERVISOR = Some(hv) };
+
+    // Initialize the hook manager
+    //
+    unsafe { HOOK_MANAGER = Some(HookManager::new(vec![])) };
 
     Some(())
 }

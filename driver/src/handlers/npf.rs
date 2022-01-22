@@ -1,3 +1,4 @@
+use crate::HOOK_MANAGER;
 use hypervisor::{
     svm::{
         data::{guest::GuestRegisters, processor_data::ProcessorData},
@@ -9,7 +10,10 @@ use hypervisor::{
 };
 
 pub fn handle_npf(vcpu: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
-    let hooked_npt = unsafe { &mut vcpu.host_stack_layout.shared_data.as_mut().hooked_npt };
+    let primary_npt = unsafe { &mut vcpu.host_stack_layout.shared_data.as_mut().primary_npt };
+    let primary_pml4 = unsafe { &mut vcpu.host_stack_layout.shared_data.as_mut().primary_pml4 };
+    let secondary_npt = unsafe { &mut vcpu.host_stack_layout.shared_data.as_mut().secondary_npt };
+    let secondary_pml4 = unsafe { &mut vcpu.host_stack_layout.shared_data.as_mut().secondary_pml4 };
 
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault
     // Ordering`
@@ -29,12 +33,8 @@ pub fn handle_npf(vcpu: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitT
             .align_down_to_base_page()
             .as_u64();
 
-        hooked_npt
-            .rw_npt
-            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWrite);
-        hooked_npt
-            .rwx_npt
-            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
+        secondary_npt.map_4kb(faulting_pa, faulting_pa, AccessType::ReadWrite);
+        primary_npt.map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
 
         return ExitType::Continue;
     }
@@ -44,29 +44,22 @@ pub fn handle_npf(vcpu: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitT
     // - #2 - No: Guest tried to execute code outside the hooked page (our hook has
     //   been exited).
     //
-    if let Some(hook_pa) = hooked_npt
+    let hook_manager = unsafe { HOOK_MANAGER.as_ref().unwrap() };
+    if let Some(hook_pa) = hook_manager
         .find_hook(faulting_pa)
         .map(|hook| hook.page_pa.as_u64())
     {
-        hooked_npt.rw_npt.change_page_permission(
-            faulting_pa,
-            hook_pa,
-            AccessType::ReadWriteExecute,
-        );
+        secondary_npt.change_page_permission(faulting_pa, hook_pa, AccessType::ReadWriteExecute);
 
-        vcpu.guest_vmcb.control_area.ncr3 = hooked_npt.rw_pml4.as_u64();
+        vcpu.guest_vmcb.control_area.ncr3 = secondary_pml4.as_u64();
     } else {
         // Just to be safe: Change the permission of the faulting pa to rwx again. I'm
         // not sure why we need this, but if we don't do it, we'll get stuck at
         // 'Launching vm'.
         //
-        hooked_npt.rwx_npt.change_page_permission(
-            faulting_pa,
-            faulting_pa,
-            AccessType::ReadWriteExecute,
-        );
+        primary_npt.change_page_permission(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
 
-        vcpu.guest_vmcb.control_area.ncr3 = hooked_npt.rwx_pml4.as_u64();
+        vcpu.guest_vmcb.control_area.ncr3 = primary_pml4.as_u64();
     }
 
     // We changed the `cr3` of the guest, so we have to flush the TLB.

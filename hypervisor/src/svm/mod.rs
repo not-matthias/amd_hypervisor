@@ -2,7 +2,6 @@ extern crate alloc;
 
 use crate::{
     debug::dbg_break,
-    hook::Hook,
     svm::{
         data::{processor_data::ProcessorData, shared_data::SharedData},
         msr::EFER_SVME,
@@ -54,7 +53,7 @@ pub struct Hypervisor {
 
 impl Hypervisor {
     /// Creates new instance for all the processors on the system.
-    pub fn new(hook: Vec<Hook>) -> Option<Self> {
+    pub fn new() -> Option<Self> {
         if !support::is_svm_supported() {
             log::error!("SVM is not supported");
             return None;
@@ -67,7 +66,7 @@ impl Hypervisor {
         log::info!("Found {} processors", processors.len());
 
         Some(Self {
-            shared_data: SharedData::new(hook)?,
+            shared_data: SharedData::new()?,
             processors,
         })
     }

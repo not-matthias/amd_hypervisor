@@ -10,7 +10,7 @@ use crate::{
 };
 
 pub fn handle_default(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
-    let hooked_npt = unsafe { &mut data.host_stack_layout.shared_data.as_mut().hooked_npt };
+    let npt = unsafe { &mut data.host_stack_layout.shared_data.as_mut().primary_npt };
 
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault
     // Ordering`
@@ -30,12 +30,7 @@ pub fn handle_default(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> E
             .align_down_to_base_page()
             .as_u64();
 
-        hooked_npt
-            .secondary_npt
-            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWrite);
-        hooked_npt
-            .primary_npt
-            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
+        npt.map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
 
         ExitType::Continue
     } else {

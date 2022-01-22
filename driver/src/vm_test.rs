@@ -39,7 +39,7 @@ pub fn check_all() {
     log::info!("apic base: {:x?}", value);
 
     // 0x122 = IA32_SMM_MONITOR_CTL
-    let value = unsafe { rdmsr(0x122) };
+    let _value = unsafe { rdmsr(0x122) };
 }
 
 pub fn check_reserved_cpuid() -> HvStatus {
