@@ -31,10 +31,10 @@ pub fn handle_default(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> E
             .as_u64();
 
         hooked_npt
-            .rw_npt
+            .secondary_npt
             .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWrite);
         hooked_npt
-            .rwx_npt
+            .primary_npt
             .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWriteExecute);
 
         ExitType::Continue

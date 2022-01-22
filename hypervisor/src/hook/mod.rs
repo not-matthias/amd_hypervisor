@@ -118,7 +118,7 @@ impl Hook {
 
     pub fn hook_function(name: &str, handler: *const ()) -> Option<Self> {
         let wide_string = widestring::U16CString::from_str(name).ok()?;
-        let wide_string = unsafe { WStr::from_raw(wide_string.as_ptr()) }; // TODO: Check if this contains the null character
+        let wide_string = unsafe { WStr::from_raw(wide_string.as_ptr()) };
 
         let mut wide_string = UnicodeString::new(wide_string);
         let address = unsafe { MmGetSystemRoutineAddress(wide_string.as_mut_ptr() as _) };

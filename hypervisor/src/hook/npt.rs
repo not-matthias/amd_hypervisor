@@ -6,17 +6,22 @@ use crate::{
 use alloc::{boxed::Box, vec::Vec};
 
 pub struct DuplicateNptHook {
-    pub rwx_npt: Box<NestedPageTable>,
-    pub rwx_pml4: PhysicalAddress,
+    pub primary_npt: Box<NestedPageTable>,
+    pub primary_pml4: PhysicalAddress,
 
     /// This is the nested page table, where the hooked pages are set to RWX and
     /// the original pages are set to RW. Because of this, we can detect
     /// when the hooked page has been left.
-    pub rw_npt: Box<NestedPageTable>,
-    pub rw_pml4: PhysicalAddress,
+    pub secondary_npt: Box<NestedPageTable>,
+    pub secondary_pml4: PhysicalAddress,
 
     pub hooks: Vec<Hook>,
 }
+
+// TODO: Remove the hooking stuff and either move it to a different crate or
+// remove it entirely.
+// TODO: Can we somehow let the user specify which page table to use? System,
+//       Duplicate, Normal, None?
 
 impl DuplicateNptHook {
     fn enable_hooks(&mut self) -> Option<()> {
@@ -30,28 +35,31 @@ impl DuplicateNptHook {
             let page = hook.original_pa.align_down_to_base_page().as_u64();
             let hook_page = hook.hook_pa.align_down_to_base_page().as_u64();
 
-            self.rwx_npt
+            self.primary_npt
                 .change_page_permission(page, page, AccessType::ReadWrite);
-            self.rw_npt
-                .change_page_permission(page, hook_page, AccessType::ReadWriteExecute);
+            self.secondary_npt.change_page_permission(
+                page,
+                hook_page,
+                AccessType::ReadWriteExecute,
+            );
         }
 
         Some(())
     }
 
     pub fn new(hooks: Vec<Hook>) -> Option<Box<Self>> {
-        let rwx_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
-        let rwx_pml4 = PhysicalAddress::from_va(rwx_npt.pml4.as_ptr() as u64);
+        let primary_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
+        let primary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
 
-        let rw_npt = NestedPageTable::identity_4kb(AccessType::ReadWrite);
-        let rw_pml4 = PhysicalAddress::from_va(rw_npt.pml4.as_ptr() as u64);
+        let secondary_npt = NestedPageTable::identity_4kb(AccessType::ReadWrite);
+        let secondary_pml4 = PhysicalAddress::from_va(secondary_npt.pml4.as_ptr() as u64);
 
         let mut instance = Self {
-            rwx_npt,
-            rwx_pml4,
+            primary_npt,
+            primary_pml4,
             //
-            rw_npt,
-            rw_pml4,
+            secondary_npt,
+            secondary_pml4,
             //
             hooks,
         };

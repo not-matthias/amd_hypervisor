@@ -95,7 +95,8 @@ impl ProcessorData {
 
         // Get physical addresses of important data structures
         //
-        let pml4_pa = physical_address(shared_data.hooked_npt.as_mut().rwx_npt.pml4.as_ptr() as _);
+        let pml4_pa =
+            physical_address(shared_data.hooked_npt.as_mut().primary_npt.pml4.as_ptr() as _);
         let msr_pm_pa = physical_address(shared_data.msr_bitmap.as_mut() as *mut _ as _);
 
         instance.configure_interceptions();

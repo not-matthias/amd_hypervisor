@@ -38,6 +38,7 @@ lazy_static! {
 
         add_handler!(VmExitType::Msr(IA32_EFER), msr::handle_efer);
         add_handler!(VmExitType::Cpuid(CPUID_DEVIRTUALIZE), cpuid::handle_devirtualize);
+        add_handler!(VmExitType::NestedPageFault, npt::handle_default);
 
         map
     };
