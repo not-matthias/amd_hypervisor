@@ -87,6 +87,13 @@ bitflags! {
         // TODO: Add other exception types.
     }
 
+    /// See `15.15.2 Guidelines for Clearing VMCB Clean Bits`
+    ///
+    /// The hypervisor must clear specific bits in the VMCB Clean field every time it explicitly modifies the
+    /// associated guest state in the VMCB. The guest's execution can cause cached state to be updated, but
+    /// the hypervisor is not responsible for setting VMCB Clean bits corresponding to any state changes
+    /// caused by guest execution.
+    ///
     /// See `15.15.3 VMCB Clean Field`
     ///
     /// Bits 31:12 are reserved for future implementations. For forward compatibility, if the hypervisor has

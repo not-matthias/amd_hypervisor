@@ -9,7 +9,7 @@ use hypervisor::{
 };
 
 pub fn handle_bp_exception(vcpu: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
-    let hook_manager = unsafe { HOOK_MANAGER.as_ref().unwrap()};
+    let hook_manager = unsafe { HOOK_MANAGER.as_ref().unwrap() };
 
     // Find the handler address for the current instruction pointer (RIP) and
     // transfer the execution to it. If we couldn't find a hook, we inject the

@@ -1,6 +1,7 @@
 use crate::svm::{
     data::{guest::GuestRegisters, processor_data::ProcessorData},
     events::EventInjection,
+    msr,
     msr::EFER_SVME,
     vmexit::ExitType,
 };
@@ -51,6 +52,10 @@ pub(crate) fn handle_efer(data: &mut ProcessorData, guest_regs: &mut GuestRegist
 pub fn handle_default(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
     let msr = guest_regs.rcx as u32;
     let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
+
+    if msr::is_valid_msr(msr) {
+        log::warn!("Found invalid msr: {:x}", msr);
+    }
 
     // Execute rdmsr or wrmsr as requested by the guest.
     //
