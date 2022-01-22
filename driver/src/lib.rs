@@ -10,15 +10,14 @@
 extern crate alloc;
 
 use crate::{
-    cpuid::{CPUID_FEATURES, CPUID_HV_VENDOR},
-    handlers::{bp, cpuid, msr, npf, rdtsc},
+    cpuid::CPUID_FEATURES,
+    handlers::{bp, cpuid, npf, rdtsc},
 };
 use alloc::vec;
 use hypervisor::{
     debug::dbg_break,
     hook::HookManager,
     svm::{
-        msr::{SVM_MSR_TSC, SVM_MSR_VM_HSAVE_PA},
         Hypervisor, VmExitType,
     },
 };
@@ -36,7 +35,6 @@ use winapi::{
 pub mod handlers;
 pub mod hook;
 pub mod lang;
-pub mod vm_test;
 
 #[global_allocator]
 static GLOBAL: KernelAlloc = KernelAlloc;
@@ -55,10 +53,7 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 fn virtualize() -> Option<()> {
     let mut hv = Hypervisor::new()?
         .with_handler(VmExitType::Rdtsc, rdtsc::handle_rdtsc)
-        .with_handler(VmExitType::Rdmsr(SVM_MSR_TSC), msr::handle_rdtsc)
-        .with_handler(VmExitType::Rdmsr(SVM_MSR_VM_HSAVE_PA), msr::handle_hsave)
         .with_handler(VmExitType::Cpuid(CPUID_FEATURES), cpuid::handle_features)
-        .with_handler(VmExitType::Cpuid(CPUID_HV_VENDOR), cpuid::handle_hv_vendor)
         .with_handler(VmExitType::Breakpoint, bp::handle_bp_exception)
         .with_handler(VmExitType::NestedPageFault, npf::handle_npf);
 
@@ -89,8 +84,6 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
         log::error!("Failed to virtualize processors");
         return STATUS_UNSUCCESSFUL;
     }
-
-    vm_test::check_all();
 
     STATUS_SUCCESS
 }
