@@ -1,6 +1,6 @@
 use crate::{
     svm::{
-        data::{shared_data::SharedData},
+        data::shared_data::SharedData,
         msr::SVM_MSR_VM_HSAVE_PA,
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
@@ -67,7 +67,7 @@ const_assert_eq!(
 );
 
 impl ProcessorData {
-    pub fn new(shared_data: &mut SharedData, context: Context) -> Box<Self> {
+    pub(crate) fn new(shared_data: &mut SharedData, context: Context) -> Box<Self> {
         // Create instance
         //
         let instance = Self {

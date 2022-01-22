@@ -24,28 +24,28 @@ pub enum AccessType {
 }
 
 impl AccessType {
-    pub fn pml4_flags(self) -> PML4Flags {
+    pub(crate) fn pml4_flags(self) -> PML4Flags {
         match self {
             AccessType::ReadWrite => PML4Flags::P | PML4Flags::RW | PML4Flags::US | PML4Flags::XD,
             AccessType::ReadWriteExecute => PML4Flags::P | PML4Flags::RW | PML4Flags::US,
         }
     }
 
-    pub fn pdpt_flags(self) -> PDPTFlags {
+    pub(crate) fn pdpt_flags(self) -> PDPTFlags {
         match self {
             AccessType::ReadWrite => PDPTFlags::P | PDPTFlags::RW | PDPTFlags::US | PDPTFlags::XD,
             AccessType::ReadWriteExecute => PDPTFlags::P | PDPTFlags::RW | PDPTFlags::US,
         }
     }
 
-    pub fn pd_flags(self) -> PDFlags {
+    pub(crate) fn pd_flags(self) -> PDFlags {
         match self {
             AccessType::ReadWrite => PDFlags::P | PDFlags::RW | PDFlags::US | PDFlags::XD,
             AccessType::ReadWriteExecute => PDFlags::P | PDFlags::RW | PDFlags::US,
         }
     }
 
-    pub fn pt_flags(self) -> PTFlags {
+    pub(crate) fn pt_flags(self) -> PTFlags {
         match self {
             AccessType::ReadWrite => {
                 PTFlags::from_iter([PTFlags::P, PTFlags::RW, PTFlags::US, PTFlags::XD])
@@ -56,7 +56,7 @@ impl AccessType {
         }
     }
 
-    pub fn modify_2mb(&self, mut flags: PDFlags) -> PDFlags {
+    pub(crate) fn modify_2mb(&self, mut flags: PDFlags) -> PDFlags {
         match self {
             AccessType::ReadWrite => {
                 flags.insert(PDFlags::RW);
@@ -71,7 +71,7 @@ impl AccessType {
         flags
     }
 
-    pub fn modify_4kb(&self, mut flags: PTFlags) -> PTFlags {
+    pub(crate) fn modify_4kb(&self, mut flags: PTFlags) -> PTFlags {
         match self {
             AccessType::ReadWrite => {
                 flags.insert(PTFlags::RW);

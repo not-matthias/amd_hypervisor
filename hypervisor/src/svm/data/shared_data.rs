@@ -27,8 +27,6 @@ impl SharedData {
     pub fn new() -> Option<Box<Self>> {
         log::info!("Creating shared data");
 
-        // TODO: How to allow the user to set their own protections for hooks etc?
-
         let primary_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
         let primary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
 
