@@ -1,6 +1,6 @@
 use crate::{
     svm::{
-        data::shared_data::SharedData,
+        data::{shared_data::SharedData},
         msr::SVM_MSR_VM_HSAVE_PA,
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
@@ -56,7 +56,7 @@ pub struct ProcessorData {
     ///  ^       HostStackLimit[KERNEL_STACK_SIZE - 2]    StackBase
     ///  High    HostStackLimit[KERNEL_STACK_SIZE - 1]    StackBase
     /// ```
-    pub host_stack_layout: HostStackLayout,
+    pub(crate) host_stack_layout: HostStackLayout,
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub(crate) host_state_area: [u8; BASE_PAGE_SIZE],
@@ -221,5 +221,12 @@ impl ProcessorData {
             .insert(InterceptMisc1::INTERCEPT_MSR_PROT);
 
         self.guest_vmcb.control_area.msrpm_base_pa = msr_pa.as_u64();
+    }
+}
+
+// Helper functions to make life a little easier.
+impl ProcessorData {
+    pub fn shared_data(&mut self) -> &mut SharedData {
+        unsafe { self.host_stack_layout.shared_data.as_mut() }
     }
 }
