@@ -1,12 +1,12 @@
 use crate::utils::nt::{
-    MmAllocateContiguousMemorySpecifyCacheNode,
-    MmFreeContiguousMemory, MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
+    MmAllocateContiguousMemorySpecifyCacheNode, MmFreeContiguousMemory,
+    MEMORY_CACHING_TYPE::MmCached, MM_ANY_NODE_OK,
 };
 use core::{
     alloc::{AllocError, Allocator, Layout},
     ptr::NonNull,
 };
-use winapi::{shared::ntdef::PHYSICAL_ADDRESS};
+use winapi::shared::ntdef::PHYSICAL_ADDRESS;
 
 /// Allocates **contiguous** physical memory.
 pub struct PhysicalAllocator;

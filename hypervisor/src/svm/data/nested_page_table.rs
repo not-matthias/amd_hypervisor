@@ -302,6 +302,8 @@ impl NestedPageTable {
             //
             let flags = access_type.pd_flags() | PDFlags::PS;
             *pd_entry = PDEntry::new(PAddr::from(host_pa), flags);
+        } else {
+            log::warn!("Tried to map a page that is already mapped: {:x}", guest_pa);
         }
     }
 
@@ -317,6 +319,8 @@ impl NestedPageTable {
             // entry.
             //
             *pt_entry = PTEntry::new(PAddr::from(host_pa), access_type.pt_flags());
+        } else {
+            log::warn!("Tried to map a page that is already mapped: {:x}", guest_pa);
         }
     }
 
@@ -340,6 +344,57 @@ impl NestedPageTable {
     //
     //
 
+    /// Translates a guest physical address to a host physical address.
+    pub fn translate(&self, virtual_address: u64) -> Option<u64> {
+        let pml4_index = pml4_index(VAddr::from(virtual_address));
+        let pml4_entry = &self.pml4[pml4_index];
+
+        if !pml4_entry.is_present() {
+            log::warn!("PML4 entry not present");
+            return None;
+        }
+
+        let pdpt_index = pdpt_index(VAddr::from(virtual_address));
+        let pdpt_entry = &self.pdp_entries[pdpt_index];
+        if !pdpt_entry.is_present() {
+            log::warn!("PDPT entry not present");
+            return None;
+        }
+        if pdpt_entry.is_page() {
+            // 1GB page
+            let physical_address = pdpt_entry.address().as_u64() + virtual_address % 0x40000000;
+            return Some(physical_address);
+        }
+
+        let pd_index = pd_index(VAddr::from(virtual_address));
+        let pd_entry = &self.pd_entries[pdpt_index][pd_index];
+        if !pd_entry.is_present() {
+            log::warn!("PD entry not present");
+            return None;
+        }
+        if pd_entry.is_page() {
+            // 2MB page
+            let physical_address = pd_entry.address().as_u64() + virtual_address % 0x200000;
+            return Some(physical_address);
+        }
+
+        let pt_index = pt_index(VAddr::from(virtual_address));
+        let pt_entry = &self.pt_entries[pdpt_index][pd_index][pt_index];
+        if !pt_entry.is_present() {
+            log::warn!("PT entry not present");
+            return None;
+        }
+
+        // or `& 0xFFF`
+        Some(pt_entry.address().as_u64() + virtual_address % 0x1000)
+    }
+
+    /// Remaps the given guest physical address and changes it to the given host
+    /// physical address.
+    pub fn remap_page(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
+        self.change_page_permission(guest_pa, host_pa, access_type);
+    }
+
     /// Changes the permission of a single page (can be 2mb or 4kb).
     pub fn change_page_permission(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         log::trace!(
@@ -350,6 +405,16 @@ impl NestedPageTable {
 
         let guest_pa = VAddr::from(guest_pa);
         let host_pa = PAddr::from(host_pa);
+
+        if (!guest_pa.is_base_page_aligned() && !guest_pa.is_large_page_aligned())
+            || (!host_pa.is_base_page_aligned() && !guest_pa.is_large_page_aligned())
+        {
+            log::error!(
+                "Pages are not aligned. Guest: {:#x}, Host: {:#x}",
+                guest_pa,
+                host_pa
+            );
+        }
 
         let pml4_index = pml4_index(guest_pa);
         let pdpt_index = pdpt_index(guest_pa);
