@@ -52,15 +52,6 @@ pub fn handle_default(data: &mut ProcessorData, guest_regs: &mut GuestRegisters)
     let msr = guest_regs.rcx as u32;
     let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
 
-    // Check if the msr is valid.
-    //
-    // TODO: enable this again?
-    // if !is_valid_msr(msr) {
-    //     dbg_break!();
-    //     EventInjection::gp().inject(data);
-    //     return ExitType::IncrementRIP;
-    // }
-
     // Execute rdmsr or wrmsr as requested by the guest.
     //
     // Important: This can bug check if the guest tries to access an MSR that is not

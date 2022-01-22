@@ -113,16 +113,4 @@ impl MsrBitmap {
             3 * RANGE_SIZE
         }
     }
-
-    #[allow(unused)]
-    fn set_bit(&mut self, msr: u32) {
-        // https://github.com/reactos/reactos/blob/3fa57b8ff7fcee47b8e2ed869aecaf4515603f3f/sdk/lib/rtl/bitmap.c#L372-L430
-        // Based on RtlSetBits
-
-        // TODO: Find the correct range
-        let _range = 0;
-        let _offset = msr & 0xffff;
-
-        // TODO: Implement this
-    }
 }
