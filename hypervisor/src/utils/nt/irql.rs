@@ -11,10 +11,8 @@ extern "system" {
     pub fn KeLowerIrql(new_irql: KIRQL);
 }
 
-pub fn KeRaiseIrql(new_irql: KIRQL, old_irql: *mut KIRQL) {
-    unsafe {
-        *old_irql = KfRaiseIrql(new_irql);
-    }
+pub unsafe fn KeRaiseIrql(new_irql: KIRQL, old_irql: *mut KIRQL) {
+    *old_irql = KfRaiseIrql(new_irql);
 }
 
 /// Passive release level
