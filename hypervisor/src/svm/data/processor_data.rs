@@ -60,11 +60,11 @@ pub struct ProcessorData {
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub(crate) host_state_area: [u8; BASE_PAGE_SIZE],
-    pub custom_data: Box<dyn Any>,
+    // pub custom_data: Box<dyn Any>,
 }
 const_assert_eq!(
     core::mem::size_of::<ProcessorData>(),
-    KERNEL_STACK_SIZE + 4 * BASE_PAGE_SIZE
+    KERNEL_STACK_SIZE + 3 * BASE_PAGE_SIZE
 );
 
 impl ProcessorData {
@@ -87,8 +87,9 @@ impl ProcessorData {
             guest_vmcb: unsafe { core::mem::zeroed() },
             host_vmcb: unsafe { core::mem::zeroed() },
             host_state_area: [0u8; BASE_PAGE_SIZE],
-            custom_data,
+            // custom_data,
         };
+        let _ = custom_data;
         let mut instance = Box::new(instance);
 
         instance.host_stack_layout.self_data = &mut *instance as *mut _ as _;
@@ -235,6 +236,7 @@ impl ProcessorData {
     }
 
     pub fn custom_data<T: 'static + Any>(&mut self) -> Option<&mut T> {
-        self.custom_data.downcast_mut()
+        None
+        // self.custom_data.downcast_mut()
     }
 }
