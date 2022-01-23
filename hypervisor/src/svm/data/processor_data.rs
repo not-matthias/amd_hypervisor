@@ -47,7 +47,7 @@ const_assert_eq!(core::mem::size_of::<HostStackLayout>(), KERNEL_STACK_SIZE);
 
 /// The data for a single **virtual** processor.
 #[repr(C, align(4096))]
-pub struct ProcessorData {
+pub struct ProcessorData<T = ()> {
     /// Taken from SimpleSvm.
     ///
     /// ```
@@ -60,14 +60,16 @@ pub struct ProcessorData {
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub(crate) host_state_area: [u8; BASE_PAGE_SIZE],
+    pub custom_data: Box<T>,
 }
 const_assert_eq!(
     core::mem::size_of::<ProcessorData>(),
-    KERNEL_STACK_SIZE + 3 * BASE_PAGE_SIZE
+    KERNEL_STACK_SIZE + 4 * BASE_PAGE_SIZE
 );
 
-impl ProcessorData {
-    pub(crate) fn new(shared_data: &mut SharedData, context: Context) -> Box<Self> {
+impl<T> ProcessorData<T> {
+    pub(crate) fn new(shared_data: &mut SharedData, context: Context) -> Box<Self>
+    where T: Default {
         // Create instance
         //
         let instance = Self {
@@ -84,6 +86,7 @@ impl ProcessorData {
             guest_vmcb: unsafe { core::mem::zeroed() },
             host_vmcb: unsafe { core::mem::zeroed() },
             host_state_area: [0u8; BASE_PAGE_SIZE],
+            custom_data: Box::new(Default::default()),
         };
         let mut instance = Box::new(instance);
 

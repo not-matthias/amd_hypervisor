@@ -46,12 +46,12 @@ pub enum VmExitType {
     Vmcall,
 }
 
-pub struct Hypervisor {
+pub struct Hypervisor<T = ()> {
     shared_data: Box<SharedData>,
-    processors: Vec<Processor>,
+    processors: Vec<Processor<T>>,
 }
 
-impl Hypervisor {
+impl<T: Default> Hypervisor<T> {
     /// Creates new instance for all the processors on the system.
     pub fn new() -> Option<Self> {
         if !support::is_svm_supported() {
@@ -155,14 +155,14 @@ impl Hypervisor {
     }
 }
 
-pub struct Processor {
+pub struct Processor<T = ()> {
     /// The index of the processor.
     index: u32,
 
-    processor_data: OnceCell<Box<ProcessorData>>,
+    processor_data: OnceCell<Box<ProcessorData<T>>>,
 }
 
-impl Processor {
+impl<T: Default> Processor<T> {
     pub fn new(index: u32) -> Option<Self> {
         log::trace!("Creating processor {}", index);
 
