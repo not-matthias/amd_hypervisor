@@ -11,7 +11,7 @@ use winapi::{
     shared::{
         basetsd::SIZE_T,
         ntdef::{
-            HANDLE, LARGE_INTEGER, NTSTATUS, OBJECT_ATTRIBUTES, PGROUP_AFFINITY, PHANDLE,
+            LARGE_INTEGER, NTSTATUS, PGROUP_AFFINITY,
             PHYSICAL_ADDRESS, PPROCESSOR_NUMBER, PVOID, ULONG, UNICODE_STRING, WCHAR,
         },
     },

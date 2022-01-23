@@ -6,11 +6,15 @@ extern "system" {
 
     pub fn KeRaiseIrqlToDpcLevel() -> KIRQL;
 
-    pub fn KeRaiseIrql(new_irql: KIRQL, old_irql: *mut KIRQL);
-
-    pub fn KfRaiseIrql(new_irql: KIRQL);
+    pub fn KfRaiseIrql(new_irql: KIRQL) -> KIRQL;
 
     pub fn KeLowerIrql(new_irql: KIRQL);
+}
+
+pub fn KeRaiseIrql(new_irql: KIRQL, old_irql: *mut KIRQL) {
+    unsafe {
+        *old_irql = KfRaiseIrql(new_irql);
+    }
 }
 
 /// Passive release level
