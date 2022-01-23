@@ -15,7 +15,7 @@ use crate::{
     },
 };
 use alloc::boxed::Box;
-use core::{arch::asm, ptr, ptr::NonNull};
+use core::{any::Any, arch::asm, ptr, ptr::NonNull};
 use x86::{
     bits64::paging::{PAddr, BASE_PAGE_SIZE},
     controlregs::cr3,
@@ -47,7 +47,7 @@ const_assert_eq!(core::mem::size_of::<HostStackLayout>(), KERNEL_STACK_SIZE);
 
 /// The data for a single **virtual** processor.
 #[repr(C, align(4096))]
-pub struct ProcessorData<T = ()> {
+pub struct ProcessorData {
     /// Taken from SimpleSvm.
     ///
     /// ```
@@ -60,16 +60,17 @@ pub struct ProcessorData<T = ()> {
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub(crate) host_state_area: [u8; BASE_PAGE_SIZE],
-    pub custom_data: Box<T>,
+    pub custom_data: Box<dyn Any>,
 }
 const_assert_eq!(
     core::mem::size_of::<ProcessorData>(),
     KERNEL_STACK_SIZE + 4 * BASE_PAGE_SIZE
 );
 
-impl<T> ProcessorData<T> {
-    pub(crate) fn new(shared_data: &mut SharedData, context: Context) -> Box<Self>
-    where T: Default {
+impl ProcessorData {
+    pub(crate) fn new(
+        custom_data: Box<dyn Any>, shared_data: &mut SharedData, context: Context,
+    ) -> Box<Self> {
         // Create instance
         //
         let instance = Self {
@@ -86,7 +87,7 @@ impl<T> ProcessorData<T> {
             guest_vmcb: unsafe { core::mem::zeroed() },
             host_vmcb: unsafe { core::mem::zeroed() },
             host_state_area: [0u8; BASE_PAGE_SIZE],
-            custom_data: Box::new(Default::default()),
+            custom_data,
         };
         let mut instance = Box::new(instance);
 
@@ -232,4 +233,8 @@ impl ProcessorData {
     pub fn shared_data(&mut self) -> &mut SharedData {
         unsafe { self.host_stack_layout.shared_data.as_mut() }
     }
+
+    // pub fn custom_data<T>(&mut self) -> &mut T {
+    //     unsafe { self.custom_data.as_mut() }
+    // }
 }

@@ -1,7 +1,6 @@
 use crate::svm::{
     data::{guest::GuestRegisters, processor_data::ProcessorData},
     events::EventInjection,
-    msr,
     msr::EFER_SVME,
     vmexit::ExitType,
 };

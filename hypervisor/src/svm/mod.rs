@@ -46,12 +46,12 @@ pub enum VmExitType {
     Vmcall,
 }
 
-pub struct Hypervisor<T = ()> {
+pub struct Hypervisor {
     shared_data: Box<SharedData>,
-    processors: Vec<Processor<T>>,
+    processors: Vec<Processor>,
 }
 
-impl<T: Default> Hypervisor<T> {
+impl Hypervisor {
     /// Creates new instance for all the processors on the system.
     pub fn new() -> Option<Self> {
         if !support::is_svm_supported() {
@@ -100,7 +100,7 @@ impl<T: Default> Hypervisor<T> {
         self
     }
 
-    pub fn virtualize(&mut self) -> bool {
+    pub fn virtualize<T: 'static + Default>(&mut self) -> bool {
         log::info!("Virtualizing processors");
 
         let mut status = true;
@@ -114,7 +114,7 @@ impl<T: Default> Hypervisor<T> {
                 break;
             };
 
-            if !processor.virtualize(self.shared_data.as_mut()) {
+            if !processor.virtualize::<T>(self.shared_data.as_mut()) {
                 log::error!("Failed to virtualize processor {}", processor.id());
 
                 status = false;
@@ -155,14 +155,14 @@ impl<T: Default> Hypervisor<T> {
     }
 }
 
-pub struct Processor<T = ()> {
+pub struct Processor {
     /// The index of the processor.
     index: u32,
 
-    processor_data: OnceCell<Box<ProcessorData<T>>>,
+    processor_data: OnceCell<Box<ProcessorData>>,
 }
 
-impl<T: Default> Processor<T> {
+impl Processor {
     pub fn new(index: u32) -> Option<Self> {
         log::trace!("Creating processor {}", index);
 
@@ -172,7 +172,7 @@ impl<T: Default> Processor<T> {
         })
     }
 
-    pub fn virtualize(&mut self, shared_data: &mut SharedData) -> bool {
+    pub fn virtualize<T: 'static + Default>(&mut self, shared_data: &mut SharedData) -> bool {
         log::info!("Virtualizing processor {}", self.index);
 
         // Based on this: https://github.com/tandasat/SimpleSvm/blob/master/SimpleSvm/SimpleSvm.cpp#L1137
@@ -207,7 +207,7 @@ impl<T: Default> Processor<T> {
             //
             let host_rsp = &self
                 .processor_data
-                .get_or_init(|| ProcessorData::new(shared_data, context))
+                .get_or_init(|| ProcessorData::new(box T::default(), shared_data, context))
                 .host_stack_layout
                 .guest_vmcb_pa as *const u64 as *mut u64;
 

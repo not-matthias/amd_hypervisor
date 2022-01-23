@@ -17,9 +17,7 @@ use alloc::vec;
 use hypervisor::{
     debug::dbg_break,
     hook::HookManager,
-    svm::{
-        Hypervisor, VmExitType,
-    },
+    svm::{Hypervisor, VmExitType},
 };
 use kernel_alloc::KernelAlloc;
 use kernel_log::KernelLogger;
@@ -57,7 +55,7 @@ fn virtualize() -> Option<()> {
         .with_handler(VmExitType::Breakpoint, bp::handle_bp_exception)
         .with_handler(VmExitType::NestedPageFault, npf::handle_npf);
 
-    if !hv.virtualize() {
+    if !hv.virtualize::<()>() {
         log::error!("Failed to virtualize processors");
         return None;
     }
