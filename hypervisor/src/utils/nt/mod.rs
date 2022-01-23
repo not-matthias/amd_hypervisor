@@ -74,16 +74,6 @@ extern "system" {
 
     pub fn ZwYieldExecution() -> NTSTATUS;
 
-    pub fn PsCreateSystemThread(
-        ThreadHandle: PHANDLE,
-        DesiredAccess: u32,
-        ObjectAttributes: *mut OBJECT_ATTRIBUTES,
-        ProcessHandle: HANDLE,
-        ClientId: *mut u64,
-        StartRoutine: *const (), // *const KSTART_ROUTINE
-        StartContext: *mut u64,
-    ) -> NTSTATUS;
-
     pub fn MmGetPhysicalMemoryRanges() -> *mut PHYSICAL_MEMORY_RANGE;
 
     pub fn MmGetVirtualForPhysical(PhysicalAddress: PHYSICAL_ADDRESS) -> *mut u64;
