@@ -1,5 +1,6 @@
 use winapi::km::wdm::KIRQL;
 
+#[link(name = "ntoskrnl")]
 extern "system" {
     pub fn KeGetCurrentIrql() -> KIRQL;
 
