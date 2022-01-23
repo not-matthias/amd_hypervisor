@@ -234,7 +234,7 @@ impl ProcessorData {
         unsafe { self.host_stack_layout.shared_data.as_mut() }
     }
 
-    // pub fn custom_data<T>(&mut self) -> &mut T {
-    //     unsafe { self.custom_data.as_mut() }
-    // }
+    pub fn custom_data<T: 'static + Any>(&mut self) -> Option<&mut T> {
+        self.custom_data.downcast_mut()
+    }
 }
