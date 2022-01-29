@@ -3,6 +3,3 @@ members = [
     "driver",
     "hypervisor",
 ]
-
-[patch.crates-io]
-x86 = { git = "https://github.com/dancrossnyc/rust-x86", branch = "asm"}
