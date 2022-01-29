@@ -55,7 +55,7 @@ fn virtualize() -> Option<()> {
         .with_handler(VmExitType::Breakpoint, bp::handle_bp_exception)
         .with_handler(VmExitType::NestedPageFault, npf::handle_npf);
 
-    if !hv.virtualize::<()>() {
+    if !hv.virtualize() {
         log::error!("Failed to virtualize processors");
         return None;
     }

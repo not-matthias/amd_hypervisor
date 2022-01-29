@@ -11,8 +11,8 @@ use winapi::{
     shared::{
         basetsd::SIZE_T,
         ntdef::{
-            LARGE_INTEGER, NTSTATUS, PGROUP_AFFINITY,
-            PHYSICAL_ADDRESS, PPROCESSOR_NUMBER, PVOID, ULONG, UNICODE_STRING, WCHAR,
+            LARGE_INTEGER, NTSTATUS, PGROUP_AFFINITY, PHYSICAL_ADDRESS, PPROCESSOR_NUMBER, PVOID,
+            ULONG, UNICODE_STRING, WCHAR,
         },
     },
     um::winnt::PCONTEXT,
