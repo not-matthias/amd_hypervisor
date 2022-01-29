@@ -3,7 +3,7 @@ use crate::{
         data::shared_data::SharedData,
         msr::SVM_MSR_VM_HSAVE_PA,
         vmcb::{
-            control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable},
+            control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable, VmExitCode},
             Vmcb,
         },
         vmexit::vmexit_installed,
@@ -60,10 +60,23 @@ pub struct ProcessorData {
     pub guest_vmcb: Vmcb,
     pub host_vmcb: Vmcb,
     pub(crate) host_state_area: [u8; BASE_PAGE_SIZE],
+
+    #[rustfmt::skip]
+    // Custom fields used for tsc offsetting.
+    //
+
+    /// The previous rdtsc value. Can be used by the vmexit handlers.
+    pub prev_rdtsc: u64,
+
+    /// The spoofed rdtsc value. Can be used by the vmexit handlers.
+    pub fake_rdtsc: u64,
+
+    /// The previous vmexit code. Can be used by the vmexit handlers.
+    pub prev_vmexit: VmExitCode,
 }
 const_assert_eq!(
     core::mem::size_of::<ProcessorData>(),
-    KERNEL_STACK_SIZE + 3 * BASE_PAGE_SIZE
+    KERNEL_STACK_SIZE + 4 * BASE_PAGE_SIZE
 );
 
 impl ProcessorData {
@@ -84,6 +97,9 @@ impl ProcessorData {
             guest_vmcb: unsafe { core::mem::zeroed() },
             host_vmcb: unsafe { core::mem::zeroed() },
             host_state_area: [0u8; BASE_PAGE_SIZE],
+            prev_rdtsc: 0,
+            fake_rdtsc: 0,
+            prev_vmexit: VmExitCode::VMEXIT_INVALID,
         };
         let mut instance = Box::new(instance);
 

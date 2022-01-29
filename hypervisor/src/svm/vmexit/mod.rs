@@ -176,6 +176,8 @@ unsafe extern "stdcall" fn handle_vmexit(
         }
     };
 
+    data.prev_vmexit = data.guest_vmcb.control_area.exit_code;
+
     // Handle the exit status of the vmexit handlers
     //
     match exit_type {
