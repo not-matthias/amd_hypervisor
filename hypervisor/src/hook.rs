@@ -5,7 +5,7 @@ use crate::{
     utils::{
         addresses::PhysicalAddress,
         function_hook::FunctionHook,
-        nt::{irql::assert_paged_code, MmGetSystemRoutineAddress, RtlCopyMemory},
+        nt::{MmGetSystemRoutineAddress, RtlCopyMemory},
     },
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -59,10 +59,6 @@ impl Hook {
         let mut page = Box::new_uninit_slice(BASE_PAGE_SIZE);
 
         log::info!("Page address: {:#x}", page_address);
-
-        // TODO: Figure out why this doesn't compile (KeGetCurrentIrql not found)
-        #[cfg(debug_assertions)]
-        assert_paged_code!();
 
         without_interrupts(|| {
             unsafe {
