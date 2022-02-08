@@ -1,4 +1,4 @@
-use crate::svm::data::processor_data::ProcessorData;
+use crate::svm::data::vcpu_data::VcpuData;
 use bitfield::bitfield;
 
 bitfield! {
@@ -63,7 +63,7 @@ impl EventInjection {
     }
 
     /// Injects the current event into the guest vmcb.
-    pub fn inject(&self, data: &mut ProcessorData) {
+    pub fn inject(&self, data: &mut VcpuData) {
         data.guest_vmcb.control_area.event_inj = self.0;
     }
 }

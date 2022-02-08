@@ -1,12 +1,12 @@
 use crate::svm::{
-    data::{guest::GuestRegisters, processor_data::ProcessorData},
+    data::{guest::GuestRegisters, vcpu_data::VcpuData},
     events::EventInjection,
     msr::EFER_SVME,
     vmexit::ExitType,
 };
 use x86::msr::{rdmsr, wrmsr};
 
-pub(crate) fn handle_efer(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
+pub(crate) fn handle_efer(data: &mut VcpuData, guest_regs: &mut GuestRegisters) -> ExitType {
     let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
 
     if write_access {
@@ -48,7 +48,7 @@ pub(crate) fn handle_efer(data: &mut ProcessorData, guest_regs: &mut GuestRegist
     ExitType::IncrementRIP
 }
 
-pub fn handle_default(data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
+pub fn handle_default(data: &mut VcpuData, guest_regs: &mut GuestRegisters) -> ExitType {
     let msr = guest_regs.rcx as u32;
     let write_access = data.guest_vmcb.control_area.exit_info1.bits() != 0;
 

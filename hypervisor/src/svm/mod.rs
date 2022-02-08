@@ -3,7 +3,7 @@ extern crate alloc;
 use crate::{
     debug::dbg_break,
     svm::{
-        data::{processor_data::ProcessorData, shared_data::SharedData},
+        data::{shared_data::SharedData, vcpu_data::VcpuData},
         msr::EFER_SVME,
         vmexit::{cpuid::CPUID_DEVIRTUALIZE, VmExitHandler},
         vmlaunch::launch_vm,
@@ -48,7 +48,7 @@ pub enum VmExitType {
 
 pub struct Hypervisor {
     shared_data: Box<SharedData>,
-    processors: Vec<Processor>,
+    processors: Vec<Vcpu>,
 }
 
 impl Hypervisor {
@@ -61,7 +61,7 @@ impl Hypervisor {
 
         let mut processors = Vec::new();
         for i in 0..processor_count() {
-            processors.push(Processor::new(i)?);
+            processors.push(Vcpu::new(i)?);
         }
         log::info!("Found {} processors", processors.len());
 
@@ -155,20 +155,20 @@ impl Hypervisor {
     }
 }
 
-pub struct Processor {
+pub struct Vcpu {
     /// The index of the processor.
     index: u32,
 
-    processor_data: OnceCell<Box<ProcessorData>>,
+    data: OnceCell<Box<VcpuData>>,
 }
 
-impl Processor {
+impl Vcpu {
     pub fn new(index: u32) -> Option<Self> {
         log::trace!("Creating processor {}", index);
 
         Some(Self {
             index,
-            processor_data: OnceCell::new(),
+            data: OnceCell::new(),
         })
     }
 
@@ -206,8 +206,8 @@ impl Processor {
             // Setup processor data and get host rsp.
             //
             let host_rsp = &self
-                .processor_data
-                .get_or_init(|| ProcessorData::new(shared_data, context))
+                .data
+                .get_or_init(|| VcpuData::new(shared_data, context))
                 .host_stack_layout
                 .guest_vmcb_pa as *const u64 as *mut u64;
 

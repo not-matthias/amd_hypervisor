@@ -1,6 +1,6 @@
 use crate::{
     svm::{
-        data::{guest::GuestRegisters, processor_data::ProcessorData},
+        data::{guest::GuestRegisters, vcpu_data::VcpuData},
         events::EventInjection,
         paging::AccessType,
         vmcb::control_area::NptExitInfo,
@@ -9,7 +9,7 @@ use crate::{
     utils::addresses::PhysicalAddress,
 };
 
-pub fn handle_default(data: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
+pub fn handle_default(data: &mut VcpuData, _regs: &mut GuestRegisters) -> ExitType {
     let npt = unsafe { &mut data.host_stack_layout.shared_data.as_mut().primary_npt };
 
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault

@@ -1,10 +1,10 @@
 use crate::svm::{
-    data::{guest::GuestRegisters, processor_data::ProcessorData},
+    data::{guest::GuestRegisters, vcpu_data::VcpuData},
     vmexit::ExitType,
 };
 use x86::cpuid::cpuid;
 
-pub fn handle_default(_data: &mut ProcessorData, guest_regs: &mut GuestRegisters) -> ExitType {
+pub fn handle_default(_data: &mut VcpuData, guest_regs: &mut GuestRegisters) -> ExitType {
     let leaf = guest_regs.rax;
     let subleaf = guest_regs.rcx;
 
@@ -19,6 +19,6 @@ pub fn handle_default(_data: &mut ProcessorData, guest_regs: &mut GuestRegisters
 }
 
 pub const CPUID_DEVIRTUALIZE: u32 = 0x4321_1234;
-pub(crate) fn handle_devirtualize(_: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
+pub(crate) fn handle_devirtualize(_: &mut VcpuData, _: &mut GuestRegisters) -> ExitType {
     ExitType::ExitHypervisor
 }

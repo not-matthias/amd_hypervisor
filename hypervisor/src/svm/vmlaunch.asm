@@ -20,7 +20,7 @@ guest_loop:
     //                 0x...ff8 Reserved1         ;
     // ----
     //
-    mov rax, [rsp]          // rax = processor_data.host_stack_layout.guest_vmcb_pa
+    mov rax, [rsp]          // rax = vcpu_data.host_stack_layout.guest_vmcb_pa
     vmload rax              // load previous saved guest state from vmcb
 
     // Start the guest execution via the VMRUN instruction.
@@ -94,7 +94,7 @@ guest_loop:
     //       allocate it.
     //
     mov rdx, rsp                    // rdx = guest_registers
-    mov rcx, [rsp + 8 * 18 + 0x190] // rcx = processor_data
+    mov rcx, [rsp + 8 * 18 + 0x190] // rcx = vcpu_data
 
     // Allocate stack for homing space (0x20) and for XMM registers (0x60). Save
     // those registers since they also have to be saved on #VMEXIT.

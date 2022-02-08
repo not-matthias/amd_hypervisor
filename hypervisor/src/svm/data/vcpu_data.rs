@@ -47,7 +47,7 @@ const_assert_eq!(core::mem::size_of::<HostStackLayout>(), KERNEL_STACK_SIZE);
 
 /// The data for a single **virtual** processor.
 #[repr(C, align(4096))]
-pub struct ProcessorData {
+pub struct VcpuData {
     /// Taken from SimpleSvm.
     ///
     /// ```
@@ -65,11 +65,11 @@ pub struct ProcessorData {
     pub prev_vmexit: VmExitCode,
 }
 const_assert_eq!(
-    core::mem::size_of::<ProcessorData>(),
+    core::mem::size_of::<VcpuData>(),
     KERNEL_STACK_SIZE + 4 * BASE_PAGE_SIZE
 );
 
-impl ProcessorData {
+impl VcpuData {
     pub(crate) fn new(shared_data: &mut SharedData, context: Context) -> Box<Self> {
         // Create instance
         //
@@ -229,7 +229,7 @@ impl ProcessorData {
 }
 
 // Helper functions to make life a little easier.
-impl ProcessorData {
+impl VcpuData {
     pub fn shared_data(&mut self) -> &mut SharedData {
         unsafe { self.host_stack_layout.shared_data.as_mut() }
     }
