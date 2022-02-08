@@ -1,18 +1,14 @@
 use crate::{
     svm::{
-        shared_data::SharedData,
-        support,
-        utils::msr::EFER_SVME,
-        vcpu_data::VcpuData,
-        vmexit::{cpuid::CPUID_DEVIRTUALIZE},
-        vmlaunch::launch_vm,
+        shared_data::SharedData, support, utils::msr::EFER_SVME, vcpu_data::VcpuData,
+        vmexit::cpuid::CPUID_DEVIRTUALIZE, vmlaunch::launch_vm,
     },
     utils::{
         debug::dbg_break,
         nt::{Context, KeBugCheck, MANUALLY_INITIATED_CRASH},
     },
 };
-use alloc::{boxed::Box};
+use alloc::boxed::Box;
 use core::lazy::OnceCell;
 use x86::{
     cpuid::cpuid,

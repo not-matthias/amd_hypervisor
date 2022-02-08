@@ -15,9 +15,9 @@ use crate::{
 };
 use alloc::vec;
 use hypervisor::{
-    debug::dbg_break,
     hook::HookManager,
     svm::{Hypervisor, VmExitType},
+    utils::debug::dbg_break,
 };
 use kernel_alloc::KernelAlloc;
 use kernel_log::KernelLogger;
@@ -49,11 +49,12 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 }
 
 fn virtualize() -> Option<()> {
-    let mut hv = Hypervisor::new()?
-        .with_handler(VmExitType::Rdtsc, rdtsc::handle_rdtsc)
-        .with_handler(VmExitType::Cpuid(CPUID_FEATURES), cpuid::handle_features)
-        .with_handler(VmExitType::Breakpoint, bp::handle_bp_exception)
-        .with_handler(VmExitType::NestedPageFault, npf::handle_npf);
+    let mut hv = Hypervisor::new()?.with_handlers([
+        (VmExitType::Rdtsc, rdtsc::handle_rdtsc),
+        (VmExitType::Cpuid(CPUID_FEATURES), cpuid::handle_features),
+        (VmExitType::Breakpoint, bp::handle_bp_exception),
+        (VmExitType::NestedPageFault, npf::handle_npf),
+    ]);
 
     if !hv.virtualize() {
         log::error!("Failed to virtualize processors");
