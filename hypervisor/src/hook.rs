@@ -1,5 +1,3 @@
-extern crate alloc;
-
 use crate::{
     svm::{nested_page_table::NestedPageTable, utils::paging::AccessType},
     utils::{

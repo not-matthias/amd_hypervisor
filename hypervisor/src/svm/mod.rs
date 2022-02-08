@@ -1,5 +1,8 @@
 use crate::{
-    svm::{shared_data::SharedData, vcpu::Vcpu, vmexit::VmExitHandler},
+    svm::{
+        nested_page_table::NestedPageTable, shared_data::SharedData, vcpu::Vcpu,
+        vmexit::VmExitHandler,
+    },
     utils::processor::{processor_count, ProcessorExecutor},
 };
 use alloc::{boxed::Box, vec::Vec};
@@ -33,45 +36,23 @@ pub enum VmExitType {
     Vmcall,
 }
 
-pub struct Hypervisor {
-    shared_data: Box<SharedData>,
-    processors: Vec<Vcpu>,
+#[derive(Default)]
+pub struct HypervisorBuilder {
+    vmexit_types: Vec<VmExitType>,
+    primary_npt: Option<Box<NestedPageTable>>,
+
+    #[cfg(feature = "secondary-npt")]
+    secondary_npt: Option<Box<NestedPageTable>>,
 }
 
-impl Hypervisor {
-    /// Creates new instance for all the processors on the system.
-    pub fn new() -> Option<Self> {
-        if !support::is_svm_supported() {
-            log::error!("SVM is not supported");
-            return None;
-        }
-
-        let mut processors = Vec::new();
-        for i in 0..processor_count() {
-            processors.push(Vcpu::new(i)?);
-        }
-        log::info!("Found {} processors", processors.len());
-
-        Some(Self {
-            shared_data: SharedData::new()?,
-            processors,
-        })
-    }
-
+impl HypervisorBuilder {
     /// Adds the specified handler.
     ///
     /// Note: If a handler is already registered for the specified type, it will
     /// be replaced.
     #[must_use]
     pub fn with_handler(mut self, vmexit_type: VmExitType, handler: VmExitHandler) -> Self {
-        // If it's an msr, we also have to set the permission in the bitmap.
-        //
-        match &vmexit_type {
-            VmExitType::Msr(msr) => self.shared_data.msr_bitmap.hook_msr(*msr),
-            VmExitType::Rdmsr(msr) => self.shared_data.msr_bitmap.hook_rdmsr(*msr),
-            VmExitType::Wrmsr(msr) => self.shared_data.msr_bitmap.hook_wrmsr(*msr),
-            _ => {}
-        }
+        self.vmexit_types.push(vmexit_type);
 
         if vmexit::VMEXIT_HANDLERS
             .write()
@@ -79,7 +60,7 @@ impl Hypervisor {
             .is_some()
         {
             log::warn!(
-                "Handler for {:?} was overwritten. Is this on purpose?",
+                "Handler for {:?} was overwritten. Was this on purpose?",
                 vmexit_type
             );
         }
@@ -97,6 +78,71 @@ impl Hypervisor {
         }
 
         instance
+    }
+
+    pub fn primary_npt(mut self, npt: Box<NestedPageTable>) -> Self {
+        self.primary_npt = Some(npt);
+        self
+    }
+
+    #[cfg(feature = "secondary-npt")]
+    pub fn secondary_npt(mut self, npt: Box<NestedPageTable>) -> Self {
+        self.secondary_npt = Some(npt);
+        self
+    }
+
+    pub fn build(self) -> Option<Hypervisor> {
+        if !support::is_svm_supported() {
+            log::error!("SVM is not supported");
+            return None;
+        }
+
+        let mut processors = Vec::new();
+        for i in 0..processor_count() {
+            processors.push(Vcpu::new(i)?);
+        }
+        log::info!("Found {} processors", processors.len());
+
+        // Create the shared data
+        //
+        let primary_npt = self.primary_npt.unwrap_or_else(NestedPageTable::default);
+
+        #[cfg(not(feature = "secondary-npt"))]
+        let mut shared_data = SharedData::new(primary_npt)?;
+
+        #[cfg(feature = "secondary-npt")]
+        let mut shared_data = {
+            let secondary_npt = self.secondary_npt.unwrap_or_else(NestedPageTable::default);
+
+            SharedData::new(primary_npt, secondary_npt)?
+        };
+
+        // Set the msr permissions in the msr bitmap
+        //
+        for exit_type in self.vmexit_types {
+            match exit_type {
+                VmExitType::Msr(msr) => shared_data.msr_bitmap.hook_msr(msr),
+                VmExitType::Rdmsr(msr) => shared_data.msr_bitmap.hook_rdmsr(msr),
+                VmExitType::Wrmsr(msr) => shared_data.msr_bitmap.hook_wrmsr(msr),
+                _ => {}
+            }
+        }
+
+        Some(Hypervisor {
+            shared_data,
+            processors,
+        })
+    }
+}
+
+pub struct Hypervisor {
+    shared_data: Box<SharedData>,
+    processors: Vec<Vcpu>,
+}
+
+impl Hypervisor {
+    pub fn builder() -> HypervisorBuilder {
+        HypervisorBuilder::default()
     }
 
     pub fn virtualize(&mut self) -> bool {

@@ -1,7 +1,5 @@
-extern crate alloc;
-
 use crate::{
-    svm::{msr_bitmap::MsrBitmap, nested_page_table::NestedPageTable, utils::paging::AccessType},
+    svm::{msr_bitmap::MsrBitmap, nested_page_table::NestedPageTable},
     utils::{addresses::PhysicalAddress, alloc::PhysicalAllocator},
 };
 use alloc::boxed::Box;
@@ -21,15 +19,11 @@ pub struct SharedData {
 }
 
 impl SharedData {
-    pub fn new() -> Option<Box<Self>> {
-        log::info!("Creating shared utils");
-
-        let primary_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
+    #[cfg(feature = "secondary-npt")]
+    pub fn new(
+        primary_npt: Box<NestedPageTable>, secondary_npt: Box<NestedPageTable>,
+    ) -> Option<Box<Self>> {
         let primary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
-
-        #[cfg(feature = "secondary-npt")]
-        let secondary_npt = NestedPageTable::identity_4kb(AccessType::ReadWrite);
-        #[cfg(feature = "secondary-npt")]
         let secondary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
 
         Some(Box::new(Self {
@@ -42,11 +36,24 @@ impl SharedData {
             primary_npt,
             primary_pml4,
 
-            #[cfg(feature = "secondary-npt")]
             secondary_npt,
-
-            #[cfg(feature = "secondary-npt")]
             secondary_pml4,
+        }))
+    }
+
+    #[cfg(not(feature = "secondary-npt"))]
+    pub fn new(primary_npt: Box<NestedPageTable>) -> Option<Box<Self>> {
+        let primary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
+
+        Some(Box::new(Self {
+            msr_bitmap: {
+                let mut bitmap = MsrBitmap::new();
+                bitmap.hook_msr(IA32_EFER);
+                bitmap
+            },
+
+            primary_npt,
+            primary_pml4,
         }))
     }
 }
