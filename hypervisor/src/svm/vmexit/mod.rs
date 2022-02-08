@@ -1,7 +1,7 @@
 use crate::{
     svm::{
         events::EventInjection,
-        utils::{guest::GuestRegisters, msr::EFER_SVME},
+        utils::{guest::GuestRegs, msr::EFER_SVME},
         vcpu_data::VcpuData,
         vmcb::control_area::VmExitCode,
         vmexit::cpuid::CPUID_DEVIRTUALIZE,
@@ -24,7 +24,7 @@ pub mod cpuid;
 pub mod msr;
 pub mod npt;
 
-pub type VmExitHandler = fn(&mut VcpuData, &mut GuestRegisters) -> ExitType;
+pub type VmExitHandler = fn(&mut VcpuData, &mut GuestRegs) -> ExitType;
 
 lazy_static! {
     pub static ref VMEXIT_HANDLERS: RwLock<HashMap<VmExitType, VmExitHandler, FnvBuildHasher>> = {
@@ -58,7 +58,7 @@ pub enum ExitType {
     Continue,
 }
 
-unsafe fn exit_hypervisor(data: &mut VcpuData, guest_regs: &mut GuestRegisters) {
+unsafe fn exit_hypervisor(data: &mut VcpuData, guest_regs: &mut GuestRegs) {
     // Set return values of cpuid as follows:
     // - rbx = address to return
     // - rcx = stack pointer to restore
@@ -98,7 +98,7 @@ unsafe fn exit_hypervisor(data: &mut VcpuData, guest_regs: &mut GuestRegisters) 
 
 #[no_mangle]
 unsafe extern "stdcall" fn handle_vmexit(
-    mut data: NonNull<VcpuData>, mut guest_regs: NonNull<GuestRegisters>,
+    mut data: NonNull<VcpuData>, mut guest_regs: NonNull<GuestRegs>,
 ) -> u8 {
     let data = data.as_mut();
     let guest_regs = guest_regs.as_mut();

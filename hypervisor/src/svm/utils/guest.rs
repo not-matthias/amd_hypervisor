@@ -1,5 +1,6 @@
+/// Guest registers.
 #[repr(C)]
-pub struct GuestRegisters {
+pub struct GuestRegs {
     pub r15: u64,
     pub r14: u64,
     pub r13: u64,
@@ -17,7 +18,4 @@ pub struct GuestRegisters {
     pub rcx: u64,
     pub rax: u64,
 }
-const_assert_eq!(
-    core::mem::size_of::<GuestRegisters>(),
-    0x80 /* 16 * 0x8 */
-);
+const_assert_eq!(core::mem::size_of::<GuestRegs>(), 0x80 /* 16 * 0x8 */);
