@@ -91,9 +91,22 @@ pub struct SaveArea {
     pub cr2: u64,
     pub reserved6: [u8; 32usize],
     pub gpat: u64,
+
+    /// Guest DebugCtl MSR—only used if hardware acceleration of LBR
+    /// virtualization is supported and enabled by setting the
+    /// LBR_VIRTUALIZATION_ENABLE bit of the VMCB control area.
     pub dbg_ctl: u64,
+
+    /// Guest LastBranchFromIP MSR—only used if hardware acceleration of LBR
+    /// virtualization is supported and enabled.
     pub br_from: u64,
+
+    /// Guest LastBranchToIP MSR—only used if hardware acceleration of LBR
+    /// virtualization is supported and enabled.
     pub br_to: u64,
+
+    /// Guest LastIntFromIP MSR—Only used if hardware acceleration of LBR
+    /// virtualization is supported and enabled.
     pub last_excep_from: u64,
     pub last_excep_to: u64,
 }

@@ -7,6 +7,15 @@ pub const EFER_SVME: u64 = 1 << 12;
 pub const SVM_MSR_TSC_RATIO: u32 = 0xC000_0104;
 pub const SVM_MSR_DEBUG_CTL: u32 = 0xC001_01D9;
 
+/// Last Branch From IP
+pub const MSR_BR_FROM: u32 = 0x0000_01DB;
+/// Last Branch To IP
+pub const MSR_BR_TO: u32 = 0x0000_01DC;
+/// Last Exception From IP
+pub const MSR_LAST_EXCP_FROM_IP: u32 = 0x0000_01DD;
+/// Last Exception To IP
+pub const MSR_LAST_EXCP_TO_IP: u32 = 0x0000_01DE;
+
 pub fn set_tsc_ratio(ratio: f32) {
     let integer = unsafe { ratio.to_int_unchecked::<u8>() };
     let fractional = ratio - integer as f32;

@@ -3,7 +3,9 @@ use crate::{
         shared_data::SharedData,
         utils::msr::SVM_MSR_VM_HSAVE_PA,
         vmcb::{
-            control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable, VmExitCode},
+            control_area::{
+                ExceptionVector, InterceptMisc1, InterceptMisc2, LbrVirt, NpEnable, VmExitCode,
+            },
             Vmcb,
         },
         vmexit::vmexit_installed,
@@ -106,6 +108,15 @@ impl VcpuData {
         instance.configure_npt(pml4_pa);
         instance.configure_msr_bitmap(msr_pm_pa);
         instance.configure_vmcb();
+
+        // Enable `Hardware Acceleration for LBR Virtualization`. See 15.23 for more
+        // information. This will save the last branch msr in the guest save area.
+        // TODO: Check if it's supported (15.23.2)
+        instance
+            .guest_vmcb
+            .control_area
+            .lbr_virtualization_enable
+            .insert(LbrVirt::ENABLE_LBR);
 
         // Setup guest state based on current system state.
         //

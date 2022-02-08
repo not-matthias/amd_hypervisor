@@ -8,28 +8,34 @@ pub struct ControlArea {
     pub intercept_dr_write: u16,              // +0x006
     pub intercept_exception: ExceptionVector, // +0x008
 
-    pub intercept_misc1: InterceptMisc1,     // +0x00c
-    pub intercept_misc2: InterceptMisc2,     // +0x010
-    pub reserved1: [u8; 0x03c - 0x014],      // +0x014
-    pub pause_filter_threshold: u16,         // +0x03c
-    pub pause_filter_count: u16,             // +0x03e
-    pub iopm_base_pa: u64,                   // +0x040
-    pub msrpm_base_pa: u64,                  // +0x048
-    pub tsc_offset: u64,                     // +0x050
-    pub guest_asid: u32,                     // +0x058
-    pub tlb_control: TlbControl,             // +0x05c
-    pub vintr: u64,                          // +0x060
-    pub interrupt_shadow: u64,               // +0x068
-    pub exit_code: VmExitCode,               // +0x070
-    pub exit_info1: NptExitInfo,             // +0x078
-    pub exit_info2: u64,                     // +0x080
-    pub exit_int_info: u64,                  // +0x088
-    pub np_enable: NpEnable,                 // +0x090
-    pub avic_apic_bar: u64,                  // +0x098
-    pub guest_pa_of_ghcb: u64,               // +0x0a0
-    pub event_inj: u64,                      // +0x0a8
-    pub ncr3: u64,                           // +0x0b0
-    pub lbr_virtualization_enable: u64,      // +0x0b8
+    pub intercept_misc1: InterceptMisc1, // +0x00c
+    pub intercept_misc2: InterceptMisc2, // +0x010
+    pub reserved1: [u8; 0x03c - 0x014],  // +0x014
+    pub pause_filter_threshold: u16,     // +0x03c
+    pub pause_filter_count: u16,         // +0x03e
+    pub iopm_base_pa: u64,               // +0x040
+    pub msrpm_base_pa: u64,              // +0x048
+    pub tsc_offset: u64,                 // +0x050
+    pub guest_asid: u32,                 // +0x058
+    pub tlb_control: TlbControl,         // +0x05c
+    pub vintr: u64,                      // +0x060
+    pub interrupt_shadow: u64,           // +0x068
+    pub exit_code: VmExitCode,           // +0x070
+    pub exit_info1: NptExitInfo,         // +0x078
+    pub exit_info2: u64,                 // +0x080
+    pub exit_int_info: u64,              // +0x088
+    pub np_enable: NpEnable,             // +0x090
+    pub avic_apic_bar: u64,              // +0x098
+    pub guest_pa_of_ghcb: u64,           // +0x0a0
+    pub event_inj: u64,                  // +0x0a8
+    pub ncr3: u64,                       // +0x0b0
+
+    /// When VMCB.LBR_VIRTUALIZATION_ENABLE is set, VMRUN saves all five host
+    /// control- transfer MSRs in the host save area, and then loads the
+    /// same five MSRs for the guest from the VMCB save area. Similarly,
+    /// #VMEXIT saves the guest's MSRs and loads the host's MSRs to and from
+    /// their respective save areas.
+    pub lbr_virtualization_enable: LbrVirt, // +0x0b8
     pub vmcb_clean: VmcbClean,               // +0x0c0
     pub nrip: u64,                           // +0x0c8
     pub num_of_bytes_fetched: u8,            // +0x0d0
@@ -45,6 +51,14 @@ pub struct ControlArea {
 const_assert_eq!(core::mem::size_of::<ControlArea>(), 0x400);
 
 bitflags! {
+    pub struct LbrVirt : u64 {
+        /// Enable LBR virtualization hardware acceleration (0 –Disabled, 1- Enabled).
+        const ENABLE_LBR = 1 << 0;
+
+        /// Virtualized VMSAVE/VMLOAD (0 –Disabled, 1- Enabled)
+        const VIRTUALIZE_VMSAVE = 1 << 1;
+    }
+
     pub struct ExceptionVector: u32 {
         /// A #DE exception occurs when the denominator of a DIV instruction or an IDIV instruction is 0. A
         /// #DE also occurs if the result is too large to be represented in the destination.
