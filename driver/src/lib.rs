@@ -49,12 +49,14 @@ pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
 }
 
 fn virtualize() -> Option<()> {
-    let mut hv = Hypervisor::new()?.with_handlers([
-        (VmExitType::Rdtsc, rdtsc::handle_rdtsc),
-        (VmExitType::Cpuid(CPUID_FEATURES), cpuid::handle_features),
-        (VmExitType::Breakpoint, bp::handle_bp_exception),
-        (VmExitType::NestedPageFault, npf::handle_npf),
-    ]);
+    let mut hv = Hypervisor::builder()
+        .with_handlers([
+            (VmExitType::Rdtsc, rdtsc::handle_rdtsc),
+            (VmExitType::Cpuid(CPUID_FEATURES), cpuid::handle_features),
+            (VmExitType::Breakpoint, bp::handle_bp_exception),
+            (VmExitType::NestedPageFault, npf::handle_npf),
+        ])
+        .build()?;
 
     if !hv.virtualize() {
         log::error!("Failed to virtualize processors");

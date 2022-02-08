@@ -1,9 +1,7 @@
 use crate::HOOK_MANAGER;
 use hypervisor::{
     hook::HookType,
-    svm::{
-        events::EventInjection, utils::guest::GuestRegs, vcpu_data::VcpuData, vmexit::ExitType,
-    },
+    svm::{events::EventInjection, utils::guest::GuestRegs, vcpu_data::VcpuData, vmexit::ExitType},
 };
 
 pub fn handle_bp_exception(vcpu: &mut VcpuData, _: &mut GuestRegs) -> ExitType {
