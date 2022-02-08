@@ -60,6 +60,8 @@ impl Hook {
 
         log::info!("Page address: {:#x}", page_address);
 
+        // TODO: Figure out why this doesn't compile (KeGetCurrentIrql not found)
+        #[cfg(debug_assertions)]
         assert_paged_code!();
 
         without_interrupts(|| {
