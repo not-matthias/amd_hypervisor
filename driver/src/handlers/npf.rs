@@ -1,15 +1,15 @@
 use crate::HOOK_MANAGER;
 use hypervisor::{
     svm::{
-        data::{guest::GuestRegisters, processor_data::ProcessorData},
-        paging::AccessType,
+        utils::{guest::GuestRegisters, paging::AccessType},
+        vcpu_data::VcpuData,
         vmcb::control_area::{NptExitInfo, TlbControl, VmcbClean},
         vmexit::ExitType,
     },
     utils::addresses::PhysicalAddress,
 };
 
-pub fn handle_npf(vcpu: &mut ProcessorData, _regs: &mut GuestRegisters) -> ExitType {
+pub fn handle_npf(vcpu: &mut VcpuData, _regs: &mut GuestRegisters) -> ExitType {
     // From the AMD manual: `15.25.6 Nested versus Guest Page Faults, Fault
     // Ordering`
     //

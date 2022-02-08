@@ -1,11 +1,8 @@
-use hypervisor::svm::{
-    data::{guest::GuestRegisters, processor_data::ProcessorData},
-    vmexit::ExitType,
-};
+use hypervisor::svm::{utils::guest::GuestRegisters, vcpu_data::VcpuData, vmexit::ExitType};
 use x86::cpuid::cpuid;
 
 pub const CPUID_FEATURES: u32 = 0x1;
-pub fn handle_features(_vcpu: &mut ProcessorData, regs: &mut GuestRegisters) -> ExitType {
+pub fn handle_features(_vcpu: &mut VcpuData, regs: &mut GuestRegisters) -> ExitType {
     let mut cpuid = cpuid!(regs.rax, regs.rcx);
 
     // Indicate presence of a hypervisor by setting the bit that are

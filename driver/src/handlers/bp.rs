@@ -2,13 +2,11 @@ use crate::HOOK_MANAGER;
 use hypervisor::{
     hook::HookType,
     svm::{
-        data::{guest::GuestRegisters, processor_data::ProcessorData},
-        events::EventInjection,
-        vmexit::ExitType,
+        events::EventInjection, utils::guest::GuestRegisters, vcpu_data::VcpuData, vmexit::ExitType,
     },
 };
 
-pub fn handle_bp_exception(vcpu: &mut ProcessorData, _: &mut GuestRegisters) -> ExitType {
+pub fn handle_bp_exception(vcpu: &mut VcpuData, _: &mut GuestRegisters) -> ExitType {
     let hook_manager = unsafe { HOOK_MANAGER.as_ref().unwrap() };
 
     // Find the handler address for the current instruction pointer (RIP) and

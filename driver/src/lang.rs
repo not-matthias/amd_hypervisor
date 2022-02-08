@@ -1,7 +1,7 @@
 use core::panic::PanicInfo;
-use hypervisor::{
+use hypervisor::utils::{
     debug::dbg_break,
-    utils::nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
+    nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
 };
 
 #[no_mangle]
