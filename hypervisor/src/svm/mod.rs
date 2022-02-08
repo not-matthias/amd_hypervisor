@@ -87,6 +87,18 @@ impl Hypervisor {
         self
     }
 
+    /// Adds multiple handlers at once.
+    #[must_use]
+    pub fn with_handlers<const N: usize>(self, handlers: [(VmExitType, VmExitHandler); N]) -> Self {
+        let mut instance = self;
+
+        for (exit_type, handler) in handlers {
+            instance = instance.with_handler(exit_type, handler)
+        }
+
+        instance
+    }
+
     pub fn virtualize(&mut self) -> bool {
         log::info!("Virtualizing processors");
 
