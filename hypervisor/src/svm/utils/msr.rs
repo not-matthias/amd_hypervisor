@@ -5,7 +5,7 @@ pub const SVM_MSR_TSC: u32 = 0x00000010;
 pub const SVM_MSR_VM_HSAVE_PA: u32 = 0xc001_0117;
 pub const EFER_SVME: u64 = 1 << 12;
 pub const SVM_MSR_TSC_RATIO: u32 = 0xC000_0104;
-pub const SVM_MSR_DEBUG_CTL: u32 = 0xC001_01D9;
+pub const SVM_MSR_DEBUG_CTL: u32 = 0x0000_01D9;
 
 /// Last Branch From IP
 pub const MSR_BR_FROM: u32 = 0x0000_01DB;
