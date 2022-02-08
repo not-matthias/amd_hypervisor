@@ -199,3 +199,11 @@ impl Hypervisor {
         status
     }
 }
+
+impl Drop for Hypervisor {
+    fn drop(&mut self) {
+        if !self.devirtualize() {
+            log::warn!("Failed to devirtualize hypervisor");
+        }
+    }
+}
