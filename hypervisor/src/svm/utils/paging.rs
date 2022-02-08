@@ -90,5 +90,5 @@ impl AccessType {
 /// Calculates how many pages are required to hold the specified number of
 /// bytes.
 pub macro bytes_to_pages($bytes:expr) {
-    ($bytes >> crate::svm::paging::PAGE_SHIFT) as usize
+    ($bytes >> crate::svm::utils::paging::PAGE_SHIFT) as usize
 }

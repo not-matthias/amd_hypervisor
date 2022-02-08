@@ -417,7 +417,7 @@ bitflags! {
         const PRESENT           = 1 << 0;
 
         /// Bit 1 (RW)—set to 1 if the nested page table level access was a write. Note that host table walks for
-        /// guest page tables are always treated as data writes.
+        /// guest page tables are always treated as utils writes.
         const RW                = 1 << 1;
 
         /// Bit 2 (US)—set to 1 if the nested page table level access was a user access. Note that nested page
@@ -429,7 +429,7 @@ bitflags! {
         const RSV               = 1 << 3;
 
         /// Bit 4 (ID)—set to 1 if the nested page table level access was a code read. Note that nested table
-        /// walks for guest page tables are always treated as data writes, even if the access itself is a code read
+        /// walks for guest page tables are always treated as utils writes, even if the access itself is a code read
         const ID                = 1 << 4;
 
         /// Bit 6 (SS) - set to 1 if the fault was caused by a shadow stack access.

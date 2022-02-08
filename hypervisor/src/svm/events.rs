@@ -1,4 +1,4 @@
-use crate::svm::data::vcpu_data::VcpuData;
+use crate::svm::vcpu_data::VcpuData;
 use bitfield::bitfield;
 
 bitfield! {

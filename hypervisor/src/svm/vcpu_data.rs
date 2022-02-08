@@ -1,7 +1,7 @@
 use crate::{
     svm::{
-        data::shared_data::SharedData,
-        msr::SVM_MSR_VM_HSAVE_PA,
+        shared_data::SharedData,
+        utils::msr::SVM_MSR_VM_HSAVE_PA,
         vmcb::{
             control_area::{ExceptionVector, InterceptMisc1, InterceptMisc2, NpEnable, VmExitCode},
             Vmcb,
@@ -45,12 +45,12 @@ pub struct HostStackLayout {
 }
 const_assert_eq!(core::mem::size_of::<HostStackLayout>(), KERNEL_STACK_SIZE);
 
-/// The data for a single **virtual** processor.
+/// The utils for a single **virtual** processor.
 #[repr(C, align(4096))]
 pub struct VcpuData {
     /// Taken from SimpleSvm.
     ///
-    /// ```
+    /// ```text
     ///  Low     HostStackLimit[0]                        StackLimit
     ///  ^       ...
     ///  ^       HostStackLimit[KERNEL_STACK_SIZE - 2]    StackBase
@@ -97,7 +97,7 @@ impl VcpuData {
         instance.host_stack_layout.guest_vmcb_pa =
             physical_address(&instance.guest_vmcb as *const _ as _).as_u64();
 
-        // Get physical addresses of important data structures
+        // Get physical addresses of important utils structures
         //
         let pml4_pa = physical_address(shared_data.primary_npt.pml4.as_ptr() as _);
         let msr_pm_pa = physical_address(shared_data.msr_bitmap.as_mut() as *mut _ as _);

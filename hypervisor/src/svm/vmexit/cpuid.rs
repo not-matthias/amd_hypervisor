@@ -1,7 +1,4 @@
-use crate::svm::{
-    data::{guest::GuestRegisters, vcpu_data::VcpuData},
-    vmexit::ExitType,
-};
+use crate::svm::{utils::guest::GuestRegisters, vcpu_data::VcpuData, vmexit::ExitType};
 use x86::cpuid::cpuid;
 
 pub fn handle_default(_data: &mut VcpuData, guest_regs: &mut GuestRegisters) -> ExitType {

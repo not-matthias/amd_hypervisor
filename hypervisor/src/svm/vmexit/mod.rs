@@ -1,15 +1,14 @@
 use crate::{
-    debug::dbg_break,
     svm::{
-        data::{guest::GuestRegisters, vcpu_data::VcpuData},
         events::EventInjection,
-        msr::EFER_SVME,
+        utils::{guest::GuestRegisters, msr::EFER_SVME},
+        vcpu_data::VcpuData,
         vmcb::control_area::VmExitCode,
-        vmexit::cpuid::CPUID_DEVIRTUALIZE,
         VmExitType,
     },
     utils::{
         addresses::physical_address,
+        debug::dbg_break,
         nt::{KeBugCheck, MANUALLY_INITIATED_CRASH},
     },
 };
@@ -30,15 +29,15 @@ lazy_static! {
     pub static ref VMEXIT_HANDLERS: RwLock<HashMap<VmExitType, VmExitHandler, FnvBuildHasher>> = {
         let map = RwLock::new(HashMap::with_hasher(FnvBuildHasher::default()));
 
-        // Default implementations
+        // // Default implementations
+        // //
+        // macro add_handler($vmexit_type: expr, $handler: expr) {
+        //     let _ = map.write().insert($vmexit_type, $handler as VmExitHandler);
+        // }
         //
-        macro add_handler($vmexit_type: expr, $handler: expr) {
-            let _ = map.write().insert($vmexit_type, $handler as VmExitHandler);
-        }
-
-        add_handler!(VmExitType::Msr(IA32_EFER), msr::handle_efer);
-        add_handler!(VmExitType::Cpuid(CPUID_DEVIRTUALIZE), cpuid::handle_devirtualize);
-        add_handler!(VmExitType::NestedPageFault, npt::handle_default);
+        // add_handler!(VmExitType::Msr(IA32_EFER), msr::handle_efer);
+        // add_handler!(VmExitType::Cpuid(CPUID_DEVIRTUALIZE), cpuid::handle_devirtualize);
+        // add_handler!(VmExitType::NestedPageFault, npt::handle_default);
 
         map
     };

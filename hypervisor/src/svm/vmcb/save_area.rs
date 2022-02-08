@@ -1,5 +1,5 @@
 use crate::{
-    svm::data::segmentation::{SegmentAttribute, SegmentDescriptor},
+    svm::utils::segmentation::{SegmentAttribute, SegmentDescriptor},
     utils::nt::Context,
 };
 use core::arch::asm;

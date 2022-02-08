@@ -1,5 +1,5 @@
 use crate::{
-    svm::paging::{bytes_to_pages, _1GB},
+    svm::utils::paging::{bytes_to_pages, _1GB},
     utils::nt::{ExFreePool, MmGetPhysicalMemoryRanges},
 };
 use tinyvec::ArrayVec;

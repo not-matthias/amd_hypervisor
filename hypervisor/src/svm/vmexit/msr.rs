@@ -1,7 +1,7 @@
 use crate::svm::{
-    data::{guest::GuestRegisters, vcpu_data::VcpuData},
     events::EventInjection,
-    msr::EFER_SVME,
+    utils::{guest::GuestRegisters, msr::EFER_SVME},
+    vcpu_data::VcpuData,
     vmexit::ExitType,
 };
 use x86::msr::{rdmsr, wrmsr};

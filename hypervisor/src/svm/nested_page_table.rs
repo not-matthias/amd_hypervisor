@@ -1,5 +1,5 @@
 use crate::{
-    svm::paging::{AccessType, PFN_MASK, _2MB, _512GB},
+    svm::utils::paging::{AccessType, PFN_MASK, _2MB, _512GB},
     utils::{addresses::physical_address, physmem_descriptor::PhysicalMemoryDescriptor},
 };
 use alloc::boxed::Box;

@@ -1,7 +1,7 @@
 extern crate alloc;
 
 use crate::{
-    svm::{data::nested_page_table::NestedPageTable, paging::AccessType},
+    svm::{nested_page_table::NestedPageTable, utils::paging::AccessType},
     utils::{
         addresses::PhysicalAddress,
         function_hook::FunctionHook,
@@ -17,7 +17,7 @@ pub enum HookType {
     /// Creates a shadow page to hook a function.
     Function { inline_hook: FunctionHook },
 
-    /// Creates a shadow page to hide some data.
+    /// Creates a shadow page to hide some utils.
     Page,
 }
 

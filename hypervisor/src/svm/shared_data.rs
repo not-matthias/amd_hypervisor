@@ -1,10 +1,7 @@
 extern crate alloc;
 
 use crate::{
-    svm::{
-        data::{msr_bitmap::MsrBitmap, nested_page_table::NestedPageTable},
-        paging::AccessType,
-    },
+    svm::{msr_bitmap::MsrBitmap, nested_page_table::NestedPageTable, utils::paging::AccessType},
     utils::{addresses::PhysicalAddress, alloc::PhysicalAllocator},
 };
 use alloc::boxed::Box;
@@ -25,7 +22,7 @@ pub struct SharedData {
 
 impl SharedData {
     pub fn new() -> Option<Box<Self>> {
-        log::info!("Creating shared data");
+        log::info!("Creating shared utils");
 
         let primary_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
         let primary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);

@@ -1,8 +1,8 @@
 use crate::{
     svm::{
-        data::{guest::GuestRegisters, vcpu_data::VcpuData},
         events::EventInjection,
-        paging::AccessType,
+        utils::{guest::GuestRegisters, paging::AccessType},
+        vcpu_data::VcpuData,
         vmcb::control_area::NptExitInfo,
         vmexit::ExitType,
     },
