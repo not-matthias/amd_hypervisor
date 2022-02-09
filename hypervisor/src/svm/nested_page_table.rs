@@ -487,6 +487,13 @@ impl NestedPageTable {
         *pml4_entry = PML4Entry::new(pml4_entry.address(), access_type.pml4_flags());
     }
 
+    /// Changes the flags of the pdp entry for the specified page.
+    pub fn change_pdpt_flags(&mut self, guest_pa: u64, access_type: AccessType) {
+        let pdpt_index = pdpt_index(VAddr::from(guest_pa));
+        let pdp_entry = &mut self.pdp_entries[pdpt_index];
+        *pdp_entry = PDPTEntry::new(pdp_entry.address(), access_type.pdpt_flags());
+    }
+
     /// Changes the permission of a single page (can be 2mb or 4kb).
     pub fn change_page_flags(&mut self, guest_pa: u64, access_type: AccessType) {
         let guest_pa = VAddr::from(guest_pa);
@@ -510,6 +517,29 @@ impl NestedPageTable {
             let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
             *pt_entry = PTEntry::new(pt_entry.address(), access_type.modify_4kb(pt_entry.flags()));
         }
+    }
+
+    /// Changes the permission of the specified page for all the page tables.
+    ///
+    /// ## Warning
+    ///
+    /// This changes the permissions of the page including the upper levels that
+    /// lead up to it. So if you set the XD bit on a page, you will also set the
+    /// XD bit on all the upper levels. Because of this, the entire page table
+    /// will not be executable.
+    ///
+    /// ## When should I use this?
+    ///
+    /// If you have a non-executable (RW) npt and you want to make a page
+    /// executable, then you also need to make the upper tables executable.
+    ///
+    /// Example scenarios:
+    /// - RW npt -> change page to RWX -> requires changing upper tables
+    /// - RWX npt -> change page to RW -> Only requires changing the page
+    pub fn change_all_page_flags(&mut self, guest_pa: u64, access_type: AccessType) {
+        self.change_pml4_flags(guest_pa, access_type);
+        self.change_pdpt_flags(guest_pa, access_type);
+        self.change_page_flags(guest_pa, access_type);
     }
 
     /// Should only be used for debugging
