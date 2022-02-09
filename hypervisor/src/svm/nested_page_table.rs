@@ -498,7 +498,7 @@ impl NestedPageTable {
     pub fn change_page_flags(&mut self, guest_pa: u64, access_type: AccessType) {
         let guest_pa = VAddr::from(guest_pa);
 
-        if !guest_pa.is_large_page_aligned() || !guest_pa.is_base_page_aligned() {
+        if !guest_pa.is_large_page_aligned() && !guest_pa.is_base_page_aligned() {
             log::error!("Page is not aligned: {:#x}", guest_pa,);
         }
 
