@@ -38,14 +38,16 @@ pub fn is_svm_supported() -> bool {
         let tsc_rate_msr = svm_info.has_tsc_rate_msr();
         let nested_paging = svm_info.has_nested_paging();
         let lbr_virtualization = svm_info.has_lbr_virtualization();
+        let flush_by_asid = svm_info.has_flush_by_asid();
 
         // TODO: Figure out how to handle those nicely.
 
         log::info!("TSC rate MSR: {}", tsc_rate_msr);
         log::info!("Nested paging: {}", nested_paging);
         log::info!("LBR virtualization: {}", lbr_virtualization);
+        log::info!("LBR virtualization: {}", flush_by_asid);
 
-        tsc_rate_msr && nested_paging && lbr_virtualization
+        tsc_rate_msr && nested_paging && lbr_virtualization && flush_by_asid
     });
     if !svm_features_supported.unwrap_or_default() {
         log::warn!("Some features needed for this hypervisor are not available.");
