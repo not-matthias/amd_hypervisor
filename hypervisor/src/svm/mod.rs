@@ -198,6 +198,10 @@ impl Hypervisor {
 
         status
     }
+
+    pub fn shared_data(&mut self) -> &mut SharedData {
+        &mut self.shared_data
+    }
 }
 
 impl Drop for Hypervisor {
