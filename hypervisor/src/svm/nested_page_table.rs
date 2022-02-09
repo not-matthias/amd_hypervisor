@@ -407,11 +407,28 @@ impl NestedPageTable {
 
     /// Remaps the given guest physical address and changes it to the given host
     /// physical address.
+    // TODO: Don't pass access type here
     pub fn remap_page(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         self.change_page_permission(guest_pa, host_pa, access_type);
     }
 
     /// Changes the permission of a single page (can be 2mb or 4kb).
+    ///
+    /// ## Warning
+    ///
+    /// This changes the permissions of the page including the upper levels that
+    /// lead up to it. So if you set the XD bit on a page, you will also set the
+    /// XD bit on all the upper levels. Because of this, the entire page table
+    /// will not be executable.
+    ///
+    /// ## When should I use this?
+    ///
+    /// If you have a non-executable (RW) npt and you want to make a page
+    /// executable, then you also need to make the upper tables executable.
+    ///
+    /// RW npt -> change page to RWX -> requires changing upper tables
+    /// RWX npt -> change page to RW -> Only requires changing the page
+    #[deprecated(note = "Use `change_page_flags` instead")]
     pub fn change_page_permission(&mut self, guest_pa: u64, host_pa: u64, access_type: AccessType) {
         log::trace!(
             "Changing permission of guest page {:#x} to {:?}",
@@ -460,6 +477,38 @@ impl NestedPageTable {
             let entry = PTEntry::new(host_pa, flags);
 
             *pt_entry = entry;
+        }
+    }
+
+    /// Changes the flags of the pml4 entry for the specified page.
+    pub fn change_pml4_flags(&mut self, guest_pa: u64, access_type: AccessType) {
+        let pml4_index = pml4_index(VAddr::from(guest_pa));
+        let pml4_entry = &mut self.pml4[pml4_index];
+        *pml4_entry = PML4Entry::new(pml4_entry.address(), access_type.pml4_flags());
+    }
+
+    /// Changes the permission of a single page (can be 2mb or 4kb).
+    pub fn change_page_flags(&mut self, guest_pa: u64, access_type: AccessType) {
+        let guest_pa = VAddr::from(guest_pa);
+
+        if !guest_pa.is_large_page_aligned() || !guest_pa.is_base_page_aligned() {
+            log::error!("Page is not aligned: {:#x}", guest_pa,);
+        }
+
+        let pdpt_index = pdpt_index(guest_pa);
+        let pd_index = pd_index(guest_pa);
+        let pt_index = pt_index(guest_pa);
+
+        let pd_entry = &mut self.pd_entries[pdpt_index][pd_index];
+        if pd_entry.is_page() {
+            log::trace!("Changing the permissions of a 2mb page");
+
+            *pd_entry = PDEntry::new(pd_entry.address(), access_type.modify_2mb(pd_entry.flags()));
+        } else {
+            log::trace!("Changing the permissions of a 4kb page");
+
+            let pt_entry = &mut self.pt_entries[pdpt_index][pd_index][pt_index];
+            *pt_entry = PTEntry::new(pt_entry.address(), access_type.modify_4kb(pt_entry.flags()));
         }
     }
 
