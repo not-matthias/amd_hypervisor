@@ -24,7 +24,7 @@ impl SharedData {
         primary_npt: Box<NestedPageTable>, secondary_npt: Box<NestedPageTable>,
     ) -> Option<Box<Self>> {
         let primary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
-        let secondary_pml4 = PhysicalAddress::from_va(primary_npt.pml4.as_ptr() as u64);
+        let secondary_pml4 = PhysicalAddress::from_va(secondary_npt.pml4.as_ptr() as u64);
 
         Some(Box::new(Self {
             msr_bitmap: {
