@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 default = []
 secondary-npt = [] # If this feature is enabled, two nested page tables will be created.
+shellcode-hook = [] # Enables unstable inline hooks (currently not recommended).
 
 [dependencies]
 widestring = { version = "0.5.1", default-features = false, features = ["alloc"] }

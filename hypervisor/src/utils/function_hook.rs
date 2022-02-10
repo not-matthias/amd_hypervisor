@@ -73,6 +73,7 @@ impl FunctionHook {
         // - 1 Byte: CC shellcode
         // - 14 Bytes: JMP shellcode
         //
+        #[cfg(feature = "shellcode-hook")]
         let (hook_type, trampoline) = match Self::trampoline_shellcode(
             original_address,
             hook_address as u64,
@@ -97,6 +98,19 @@ impl FunctionHook {
 
                 (HookType::Breakpoint, trampoline)
             }
+        };
+
+        #[cfg(not(feature = "shellcode-hook"))]
+        let (hook_type, trampoline) = {
+            let trampoline =
+                Self::trampoline_shellcode(original_address, hook_address as u64, BP_SHELLCODE_LEN)
+                    .map_err(|e| {
+                        log::warn!("Failed to create bp trampoline: {:?}", e);
+                        e
+                    })
+                    .ok()?;
+
+            (HookType::Breakpoint, trampoline)
         };
 
         // Lock the virtual address. The specified hook address can/will be tradable
