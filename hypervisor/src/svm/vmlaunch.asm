@@ -2,6 +2,44 @@
 
 // KTRAP_FRAME_SIZE: 0x190
 
+.macro pushgp
+    push    rax
+    push    rcx
+    push    rdx
+    push    rbx
+    push    -1      // Dummy for rsp.
+    push    rbp
+    push    rsi
+    push    rdi
+    push    r8
+    push    r9
+    push    r10
+    push    r11
+    push    r12
+    push    r13
+    push    r14
+    push    r15
+.endmacro
+
+.macro popgp
+    pop     r15
+    pop     r14
+    pop     r13
+    pop     r12
+    pop     r11
+    pop     r10
+    pop     r9
+    pop     r8
+    pop     rdi
+    pop     rsi
+    pop     rbp
+    pop     rbx    // Dummy for rsp (this value is destroyed by the next pop).
+    pop     rbx
+    pop     rdx
+    pop     rcx
+    pop     rax
+.endmacro
+
 launch_vm:
     // rsp = host_rsp
     //
@@ -53,25 +91,12 @@ guest_loop:
     // the guest while handle_vmexit is being executed.
     sub rsp, 0x190          // KTRAP_FRAME_SIZE
 
+    // TODO: Captur br_from, br_to etc here
+
     // Sve the general purpose registers of the guest since they are not
     // saved on #VMEXIT.
     //
-    push    rax
-    push    rcx
-    push    rdx
-    push    rbx
-    push    -1      // Dummy for rsp.
-    push    rbp
-    push    rsi
-    push    rdi
-    push    r8
-    push    r9
-    push    r10
-    push    r11
-    push    r12
-    push    r13
-    push    r14
-    push    r15
+    pushgp
 
     // Set parameters for `handle_vmexit`.
     //
@@ -128,22 +153,7 @@ guest_loop:
     //
     test al, al
 
-    pop     r15
-    pop     r14
-    pop     r13
-    pop     r12
-    pop     r11
-    pop     r10
-    pop     r9
-    pop     r8
-    pop     rdi
-    pop     rsi
-    pop     rbp
-    pop     rbx    // Dummy for rsp (this value is destroyed by the next pop).
-    pop     rbx
-    pop     rdx
-    pop     rcx
-    pop     rax
+    popgp
 
     // If the return value is not 0, we need to exit the loop. Otherwise just
     // continue the loop and resume the guest.
