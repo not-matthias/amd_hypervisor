@@ -1,1 +1,0 @@
-cargo br --features mmap -Z build-std=panic_abort -Z build-std-features=panic_immediate_abort
