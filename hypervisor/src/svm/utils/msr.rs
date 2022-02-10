@@ -236,20 +236,20 @@ pub fn is_valid_msr(msr: u32) -> bool {
         || (0xC001_1002..=0xC001_103C).contains(&msr)
 }
 
+bitfield! {
+    pub struct DebugCtl(u64);
+
+    pub last_branch_record, set_last_branch_record: 0, 0;
+    pub branch_single_step, set_branch_single_step: 1, 1;
+
+    // Performance Monitoring Pin Control
+    pub pb0, set_pb0: 2, 2;
+    pub pb1, set_pb1: 3, 3;
+    pub pb2, set_pb2: 4, 4;
+    pub pb3, set_pb3: 5, 5;
+}
+
 pub fn toggle_debug_control(enable: bool) {
-    bitfield! {
-        pub struct DebugCtl(u64);
-
-        pub last_branch_record, set_last_branch_record: 0, 0;
-        pub branch_single_step, set_branch_single_step: 1, 1;
-
-        // Performance Monitoring Pin Control
-        pub pb0, set_pb0: 2, 2;
-        pub pb1, set_pb1: 3, 3;
-        pub pb2, set_pb2: 4, 4;
-        pub pb3, set_pb3: 5, 5;
-    }
-
     let mut value = DebugCtl(unsafe { rdmsr(SVM_MSR_DEBUG_CTL) });
     value.set_last_branch_record(enable as u64);
     unsafe { wrmsr(SVM_MSR_DEBUG_CTL, value.0) };

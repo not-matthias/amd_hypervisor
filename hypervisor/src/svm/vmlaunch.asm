@@ -1,8 +1,9 @@
 .global launch_vm
 
-// KTRAP_FRAME_SIZE: 0x190
+.equ KTRAP_FRAME_SIZE, 0x190
+.equ GUEST_REGS_SIZE, 0x80
 
-.macro pushgp
+.macro pushaq
     push    rax
     push    rcx
     push    rdx
@@ -21,7 +22,7 @@
     push    r15
 .endmacro
 
-.macro popgp
+.macro popaq
     pop     r15
     pop     r14
     pop     r13
@@ -89,14 +90,12 @@ guest_loop:
 
     // Allocate trap frame so that WinDbg can display the strack trace of
     // the guest while handle_vmexit is being executed.
-    sub rsp, 0x190          // KTRAP_FRAME_SIZE
-
-    // TODO: Captur br_from, br_to etc here
+    sub rsp, KTRAP_FRAME_SIZE
 
     // Sve the general purpose registers of the guest since they are not
     // saved on #VMEXIT.
     //
-    pushgp
+    pushaq
 
     // Set parameters for `handle_vmexit`.
     //
@@ -118,8 +117,8 @@ guest_loop:
     // Note: KTRAP_FRAME_SIZE is just 0 in our case since we didn't
     //       allocate it.
     //
-    mov rdx, rsp                    // rdx = guest_registers
-    mov rcx, [rsp + 8 * 18 + 0x190] // rcx = vcpu_data
+    mov rdx, rsp                                                // rdx = guest_registers
+    mov rcx, [rsp + GUEST_REGS_SIZE + KTRAP_FRAME_SIZE + 16]    // rcx = vcpu_data
 
     // Allocate stack for homing space (0x20) and for XMM registers (0x60). Save
     // those registers since they also have to be saved on #VMEXIT.
@@ -131,8 +130,6 @@ guest_loop:
     movaps [rsp + 0x20 + 0x30], xmm3
     movaps [rsp + 0x20 + 0x40], xmm4
     movaps [rsp + 0x20 + 0x50], xmm5
-
-    // Optional: End the function prolog here
 
     // Handle #VMEXIT
     //
@@ -153,14 +150,14 @@ guest_loop:
     //
     test al, al
 
-    popgp
+    popaq
 
     // If the return value is not 0, we need to exit the loop. Otherwise just
     // continue the loop and resume the guest.
     //
-    jnz exit_loop       // if (handle_vmexit() != 0 {{ jmp exit_loop }}
-    add rsp, 0x190      // else {{ remove trap frame and
-    jmp guest_loop      // continue loop }}
+    jnz exit_loop               // if (handle_vmexit() != 0 {{ jmp exit_loop }}
+    add rsp, KTRAP_FRAME_SIZE   // else {{ remove trap frame and
+    jmp guest_loop              // continue loop }}
 
 exit_loop:
     // Virtualization has been terminated. We have to restore everything back

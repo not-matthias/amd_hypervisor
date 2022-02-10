@@ -1,5 +1,8 @@
 use crate::{
-    svm::utils::segmentation::{SegmentAttribute, SegmentDescriptor},
+    svm::utils::{
+        msr::DebugCtl,
+        segmentation::{SegmentAttribute, SegmentDescriptor},
+    },
     utils::nt::Context,
 };
 use core::arch::asm;
@@ -95,7 +98,7 @@ pub struct SaveArea {
     /// Guest DebugCtl MSR—only used if hardware acceleration of LBR
     /// virtualization is supported and enabled by setting the
     /// LBR_VIRTUALIZATION_ENABLE bit of the VMCB control area.
-    pub dbg_ctl: u64,
+    pub dbg_ctl: DebugCtl,
 
     /// Guest LastBranchFromIP MSR—only used if hardware acceleration of LBR
     /// virtualization is supported and enabled.
@@ -299,7 +302,7 @@ impl Default for SaveArea {
             cr2: 0,
             reserved6: [0u8; 32],
             gpat: 0,
-            dbg_ctl: 0,
+            dbg_ctl: DebugCtl(0),
             br_from: 0,
             br_to: 0,
             last_excep_from: 0,
