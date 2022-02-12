@@ -7,17 +7,21 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-winapi = { git = "https://github.com/Trantect/winapi-rs.git", branch = "feature/km", default-features = false, features = ["wdm", "ntstatus"] }
-
 kernel-build = "0.1.0"
 kernel-log = "0.1.1"
 kernel-alloc = { version = "0.1.2", features = ["pool-tag"] }
 
 log = "0.4.14"
-x86 = "0.45.0"
-x86_64 = "0.14.7"
+x86 = "0.46.0"
+x86_64 = "0.14.8"
 
 hypervisor = { path = "../hypervisor", features = ["secondary-npt"] }
+
+[dependencies.winapi]
+git = "https://github.com/Trantect/winapi-rs.git"
+branch = "feature/km"
+default-features = false
+features = ["wdm", "ntstatus"]
 
 [profile.release]
 lto = "fat"
