@@ -64,7 +64,7 @@ impl ProcessorExecutor {
 
 impl Drop for ProcessorExecutor {
     fn drop(&mut self) {
-        log::info!("Switching execution back to previous processor");
+        log::trace!("Switching execution back to previous processor");
         unsafe {
             KeRevertToUserGroupAffinityThread(self.old_affinity.as_mut_ptr());
         }

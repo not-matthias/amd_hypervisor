@@ -22,7 +22,7 @@ use hypervisor::{
         nested_page_table::NestedPageTable, utils::paging::AccessType, vmexit::rdtsc, Hypervisor,
         VmExitType,
     },
-    utils::debug::dbg_break,
+    utils::{debug::dbg_break, nt::MmIsAddressValid},
 };
 use kernel_alloc::KernelAlloc;
 use kernel_log::KernelLogger;
@@ -60,7 +60,18 @@ fn virtualize() -> Option<()> {
     if let HookType::Function { ref inline_hook } = hook.hook_type {
         hook::ORIGINAL.store(inline_hook.trampoline_address(), Ordering::Relaxed);
     }
-    unsafe { HOOK_MANAGER = Some(HookManager::new(vec![hook])) };
+    let hook_manager = HookManager::new(vec![hook]);
+
+    // Setup the nested page tables. Because we also have hooks, we need to change
+    // the permissions of the page tables accordingly. This will be done by the
+    // `HookManager`.
+    //
+    let mut primary_npt = NestedPageTable::identity_4kb(AccessType::ReadWriteExecute);
+    let mut secondary_npt = NestedPageTable::identity_4kb(AccessType::ReadWrite);
+
+    hook_manager.enable_hooks(&mut primary_npt, &mut secondary_npt);
+
+    unsafe { HOOK_MANAGER = Some(hook_manager) };
 
     // Create the hypervisor with some handlers. If you have handlers that are in
     // another crate, you can export an array and add them via `with_handlers`.
@@ -75,14 +86,15 @@ fn virtualize() -> Option<()> {
             (VmExitType::Breakpoint, bp::handle_bp_exception),
             (VmExitType::NestedPageFault, npf::handle_npf),
         ])
-        .primary_npt(NestedPageTable::identity_4kb(AccessType::ReadWriteExecute))
-        .secondary_npt(NestedPageTable::identity_4kb(AccessType::ReadWrite))
+        .primary_npt(primary_npt)
+        .secondary_npt(secondary_npt)
         .build()?;
 
     if !hv.virtualize() {
         log::error!("Failed to virtualize processors");
         return None;
     }
+
     unsafe { HYPERVISOR = Some(hv) };
 
     Some(())
@@ -102,6 +114,10 @@ pub extern "system" fn DriverEntry(driver: *mut DRIVER_OBJECT, _path: PVOID) -> 
         log::error!("Failed to virtualize processors");
         return STATUS_UNSUCCESSFUL;
     }
+
+    // Test the hooks
+    //
+    unsafe { MmIsAddressValid(0 as _) };
 
     STATUS_SUCCESS
 }

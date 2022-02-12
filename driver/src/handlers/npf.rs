@@ -3,7 +3,7 @@ use hypervisor::{
     svm::{
         utils::{guest::GuestRegs, paging::AccessType},
         vcpu_data::VcpuData,
-        vmcb::control_area::{NptExitInfo, TlbControl, VmcbClean},
+        vmcb::control_area::{NptExitInfo, TlbControl},
         vmexit::ExitType,
     },
     utils::addresses::PhysicalAddress,
@@ -72,14 +72,14 @@ pub fn handle_npf(vcpu: &mut VcpuData, _regs: &mut GuestRegs) -> ExitType {
 
     // We changed the `cr3` of the guest, so we have to flush the TLB.
     //
+    // Note: If you have an older cpu (or if you are running inside kvm),
+    // `FLUSH_GUEST_TLB` might not be supported. If that's the case, we have to use
+    // `FLUSH_ENTIRE_TLB`.
+    //
     vcpu.guest_vmcb
         .control_area
         .tlb_control
         .insert(TlbControl::FLUSH_GUEST_TLB);
-    vcpu.guest_vmcb
-        .control_area
-        .vmcb_clean
-        .remove(VmcbClean::NP);
 
     ExitType::Continue
 }
