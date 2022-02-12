@@ -1,7 +1,7 @@
-use hypervisor::svm::{utils::guest::GuestRegs, vcpu_data::VcpuData, vmexit::ExitType};
+use crate::svm::{utils::guest::GuestRegs, vcpu_data::VcpuData, vmexit::ExitType};
 use x86::time::rdtsc;
 
-pub fn handle_rdtsc(_vcpu: &mut VcpuData, regs: &mut GuestRegs) -> ExitType {
+pub fn handle_default(_vcpu: &mut VcpuData, regs: &mut GuestRegs) -> ExitType {
     let rdtsc = unsafe { rdtsc() };
 
     regs.rax = (rdtsc as u32) as u64;
