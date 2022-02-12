@@ -24,18 +24,16 @@ pub fn handle_npf(vcpu: &mut VcpuData, _regs: &mut GuestRegs) -> ExitType {
     // Page was not present so we have to map it.
     //
     if !exit_info.contains(NptExitInfo::PRESENT) {
-        let faulting_pa = PhysicalAddress::from_pa(faulting_pa)
+        let pa = PhysicalAddress::from_pa(faulting_pa)
             .align_down_to_base_page()
             .as_u64();
 
         vcpu.shared_data()
             .secondary_npt
-            .map_4kb(faulting_pa, faulting_pa, AccessType::ReadWrite);
-        vcpu.shared_data().primary_npt.map_4kb(
-            faulting_pa,
-            faulting_pa,
-            AccessType::ReadWriteExecute,
-        );
+            .map_4kb(pa, pa, AccessType::ReadWrite);
+        vcpu.shared_data()
+            .primary_npt
+            .map_4kb(pa, pa, AccessType::ReadWriteExecute);
 
         return ExitType::Continue;
     }
@@ -43,14 +41,14 @@ pub fn handle_npf(vcpu: &mut VcpuData, _regs: &mut GuestRegs) -> ExitType {
     // Check if there exists a hook for the faulting page.
     // - #1 - Yes: Guest tried to execute a function inside the hooked page.
     // - #2 - No: Guest tried to execute code outside the hooked page (our hook has
-    //   been exited).
+    //   finished executing).
     //
     let hook_manager = unsafe { HOOK_MANAGER.as_ref().unwrap() };
     if let Some(hook_pa) = hook_manager
         .find_hook(faulting_pa)
         .map(|hook| hook.page_pa.as_u64())
     {
-        vcpu.shared_data().secondary_npt.change_page_permission(
+        vcpu.shared_data().secondary_npt.remap_page(
             faulting_pa,
             hook_pa,
             AccessType::ReadWriteExecute,
@@ -62,7 +60,8 @@ pub fn handle_npf(vcpu: &mut VcpuData, _regs: &mut GuestRegs) -> ExitType {
         // not sure why we need this, but if we don't do it, we'll get stuck at
         // 'Launching vm'.
         //
-        vcpu.shared_data().primary_npt.change_page_permission(
+        // TODO: Check if we need this.
+        vcpu.shared_data().primary_npt.remap_page(
             faulting_pa,
             faulting_pa,
             AccessType::ReadWriteExecute,

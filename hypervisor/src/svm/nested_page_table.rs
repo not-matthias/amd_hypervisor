@@ -175,15 +175,6 @@ impl NestedPageTable {
             npt.map_2mb(pa as u64, pa as u64, access_type);
         }
 
-        // Map
-        //
-        // let apic_base = unsafe { rdmsr(IA32_APIC_BASE) };
-        // // Bits 12:35
-        // let apic_base = apic_base & 0xFFFFF000;
-        // let apic_base = apic_base * LARGE_PAGE_SIZE as u64;
-        //
-        // npt.map_2mb(apic_base, apic_base, access_type);
-
         npt
     }
 
