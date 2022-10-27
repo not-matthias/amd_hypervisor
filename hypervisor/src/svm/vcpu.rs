@@ -91,7 +91,7 @@ impl Vcpu {
         //
         let result = cpuid!(CPUID_DEVIRTUALIZE);
         if result.ecx != 0xDEADBEEF {
-            log::info!(
+            log::trace!(
                 "Ecx is not 0xDEADBEEF. Nothing to do. Ecx: {:x}",
                 result.ecx
             );

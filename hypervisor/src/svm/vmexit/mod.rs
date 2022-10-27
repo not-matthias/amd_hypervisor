@@ -23,6 +23,7 @@ use x86::msr::{rdmsr, wrmsr, IA32_EFER};
 pub mod cpuid;
 pub mod msr;
 pub mod npt;
+pub mod rdtsc;
 
 pub type VmExitHandler = fn(&mut VcpuData, &mut GuestRegs) -> ExitType;
 
