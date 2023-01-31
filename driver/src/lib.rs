@@ -47,8 +47,6 @@ static mut HYPERVISOR: Option<Hypervisor> = None;
 
 pub extern "system" fn driver_unload(_driver: &mut DRIVER_OBJECT) {
     if let Some(mut hv) = unsafe { HYPERVISOR.take() } {
-        hv.devirtualize();
-
         core::mem::drop(hv);
     }
 }
