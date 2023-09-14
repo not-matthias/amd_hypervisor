@@ -89,9 +89,6 @@ pub fn is_svm_supported() -> bool {
 static VIRTUALIZED_BITSET: AtomicU64 = AtomicU64::new(0);
 
 /// Checks whether the current process is already virtualized.
-///
-/// This is done by comparing the value of cpuid leaf 0x40000000. The cpuid
-/// vmexit has to return the correct value to be able to use this.
 pub fn is_virtualized() -> bool {
     let bit = 1 << current_processor_index();
 
